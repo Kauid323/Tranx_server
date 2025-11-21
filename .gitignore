@@ -1,0 +1,34 @@
+# 忽略编译生成的可执行文件
+taruapp
+taruapp.exe
+seed_data
+seed_data.exe
+
+# 忽略数据库文件
+*.db
+*.db-shm
+*.db-wal
+
+# 忽略日志文件
+*.log
+
+# 忽略临时文件
+*.tmp
+*.temp
+
+# 忽略 IDE 配置文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 忽略操作系统生成的文件
+.DS_Store
+Thumbs.db
+
+# 忽略 Go 相关
+vendor/
+*.test
+*.out
+

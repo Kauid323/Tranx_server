@@ -1,0 +1,566 @@
+package handlers
+
+import (
+	"TaruApp/database"
+	"TaruApp/models"
+	"TaruApp/utils"
+	"database/sql"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+// CreatePost 创建帖子
+func CreatePost(c *gin.Context) {
+	var req models.CreatePostRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Code:    400,
+			Message: "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	// 如果没有指定板块或板块ID为0，默认发到主板块(ID=1)
+	if req.BoardID == 0 {
+		req.BoardID = 1
+	}
+
+	// 获取当前用户信息
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+
+	now := time.Now()
+	
+	// 开始事务
+	tx, err := database.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "创建帖子失败: " + err.Error(),
+		})
+		return
+	}
+	defer tx.Rollback()
+	
+	// 插入帖子
+	result, err := tx.Exec(
+		`INSERT INTO posts (board_id, user_id, title, content, publisher, publish_time, image_url, last_reply_time) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.BoardID, userID, req.Title, req.Content, username, now, req.ImageURL, now,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "创建帖子失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 增加用户经验值（发帖奖励5经验）
+	rewardExp := 5
+	_, err = tx.Exec(
+		"UPDATE users SET exp = exp + ? WHERE id = ?",
+		rewardExp, userID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "增加经验失败: " + err.Error(),
+		})
+		return
+	}
+	
+	// 获取更新后的经验值
+	var exp int
+	err = tx.QueryRow("SELECT exp FROM users WHERE id = ?", userID).Scan(&exp)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询经验值失败: " + err.Error(),
+		})
+		return
+	}
+	
+	// 计算新的用户等级
+	newUserLevel := utils.CalculateUserLevel(exp)
+	
+	// 更新用户等级
+	_, err = tx.Exec(
+		"UPDATE users SET user_level = ? WHERE id = ?",
+		newUserLevel, userID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "更新用户等级失败: " + err.Error(),
+		})
+		return
+	}
+	
+	// 提交事务
+	if err = tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "创建帖子失败: " + err.Error(),
+		})
+		return
+	}
+
+	id, _ := result.LastInsertId()
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "创建帖子成功",
+		Data: gin.H{
+			"id":         id,
+			"board_id":   req.BoardID,
+			"reward_exp": rewardExp,
+			"total_exp":  exp,
+			"user_level": newUserLevel,
+		},
+	})
+}
+
+// GetPosts 获取帖子列表（支持板块筛选和排序）
+func GetPosts(c *gin.Context) {
+	var query models.GetPostsQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Code:    400,
+			Message: "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	// 如果没有指定板块，默认显示主板块(ID=1)的帖子
+	if query.BoardID == 0 {
+		query.BoardID = 1
+	}
+
+	// 默认分页参数
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	if query.PageSize > 100 {
+		query.PageSize = 100
+	}
+
+	// 构建查询语句
+	baseQuery := "SELECT id, board_id, user_id, title, content, publisher, publish_time, coins, favorites, likes, image_url, attachment_url, attachment_type, comment_count, view_count, last_reply_time, created_at, updated_at FROM posts"
+	countQuery := "SELECT COUNT(*) FROM posts"
+	whereClause := " WHERE board_id = ?"
+	orderClause := ""
+
+	// 板块筛选（现在总是有board_id）
+	args := []interface{}{query.BoardID}
+
+	// 排序逻辑
+	switch query.Sort {
+	case "latest":
+		orderClause = " ORDER BY publish_time DESC" // 最新发布
+	case "reply":
+		orderClause = " ORDER BY last_reply_time DESC" // 最近回复
+	case "hot":
+		orderClause = " ORDER BY (likes * 3 + favorites * 2 + coins * 5 + comment_count * 2 + view_count) DESC" // 热门（综合权重）
+	default:
+		orderClause = " ORDER BY publish_time DESC" // 默认最新发布
+	}
+
+	// 分页
+	offset := (query.Page - 1) * query.PageSize
+	limitClause := " LIMIT ? OFFSET ?"
+	paginationArgs := append(args, query.PageSize, offset)
+
+	// 查询总数
+	var total int
+	err := database.DB.QueryRow(countQuery+whereClause, args...).Scan(&total)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询帖子总数失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 查询帖子列表
+	rows, err := database.DB.Query(baseQuery+whereClause+orderClause+limitClause, paginationArgs...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询帖子列表失败: " + err.Error(),
+		})
+		return
+	}
+	defer rows.Close()
+
+	var posts []models.Post
+	for rows.Next() {
+		var post models.Post
+		var imageURL, attachmentURL, attachmentType sql.NullString
+		err := rows.Scan(
+			&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Publisher,
+			&post.PublishTime, &post.Coins, &post.Favorites, &post.Likes,
+			&imageURL, &attachmentURL, &attachmentType, &post.CommentCount, &post.ViewCount, &post.LastReplyTime,
+			&post.CreatedAt, &post.UpdatedAt,
+		)
+		if err != nil {
+			continue
+		}
+		if imageURL.Valid {
+			post.ImageURL = imageURL.String
+		}
+		if attachmentURL.Valid {
+			post.AttachmentURL = attachmentURL.String
+		}
+		if attachmentType.Valid {
+			post.AttachmentType = attachmentType.String
+		}
+		posts = append(posts, post)
+	}
+
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "获取帖子列表成功",
+		Data: models.PageData{
+			Total:    total,
+			Page:     query.Page,
+			PageSize: query.PageSize,
+			List:     posts,
+		},
+	})
+}
+
+// GetPostDetail 获取帖子详情
+func GetPostDetail(c *gin.Context) {
+	id := c.Param("id")
+	userID, _ := c.Get("user_id")
+
+	// 增加浏览数
+	database.DB.Exec("UPDATE posts SET view_count = view_count + 1 WHERE id = ?", id)
+
+	// 记录浏览历史
+	if userID != nil {
+		database.DB.Exec(
+			"INSERT INTO view_histories (user_id, post_id) VALUES (?, ?)",
+			userID, id,
+		)
+	}
+
+	var post models.Post
+	var imageURL, attachmentURL, attachmentType sql.NullString
+	err := database.DB.QueryRow(
+		`SELECT id, board_id, user_id, title, content, publisher, publish_time, coins, favorites, likes, 
+		image_url, attachment_url, attachment_type, comment_count, view_count, last_reply_time, created_at, updated_at 
+		FROM posts WHERE id = ?`,
+		id,
+	).Scan(
+		&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Publisher,
+		&post.PublishTime, &post.Coins, &post.Favorites, &post.Likes,
+		&imageURL, &attachmentURL, &attachmentType, &post.CommentCount, &post.ViewCount, &post.LastReplyTime,
+		&post.CreatedAt, &post.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, models.Response{
+			Code:    404,
+			Message: "帖子不存在",
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询帖子失败: " + err.Error(),
+		})
+		return
+	}
+
+	if imageURL.Valid {
+		post.ImageURL = imageURL.String
+	}
+	if attachmentURL.Valid {
+		post.AttachmentURL = attachmentURL.String
+	}
+	if attachmentType.Valid {
+		post.AttachmentType = attachmentType.String
+	}
+
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "获取帖子详情成功",
+		Data:    post,
+	})
+}
+
+// UpdatePost 更新帖子
+func UpdatePost(c *gin.Context) {
+	id := c.Param("id")
+	var req models.CreatePostRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Code:    400,
+			Message: "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	_, err := database.DB.Exec(
+		"UPDATE posts SET title = ?, content = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		req.Title, req.Content, req.ImageURL, id,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "更新帖子失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "更新帖子成功",
+	})
+}
+
+// DeletePost 删除帖子
+func DeletePost(c *gin.Context) {
+	id := c.Param("id")
+
+	// 删除帖子的所有评论
+	database.DB.Exec("DELETE FROM comments WHERE post_id = ?", id)
+
+	// 删除帖子
+	_, err := database.DB.Exec("DELETE FROM posts WHERE id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除帖子失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "删除帖子成功",
+	})
+}
+
+// LikePost 点赞帖子
+func LikePost(c *gin.Context) {
+	id := c.Param("id")
+	userID, _ := c.Get("user_id")
+
+	// 检查是否已点赞
+	var count int
+	err := database.DB.QueryRow(
+		"SELECT COUNT(*) FROM post_likes WHERE user_id = ? AND post_id = ?",
+		userID, id,
+	).Scan(&count)
+	if err == nil && count > 0 {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Code:    400,
+			Message: "已经点赞过该帖子",
+		})
+		return
+	}
+
+	// 开始事务
+	tx, err := database.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "点赞失败: " + err.Error(),
+		})
+		return
+	}
+	defer tx.Rollback()
+
+	// 记录点赞
+	_, err = tx.Exec(
+		"INSERT INTO post_likes (user_id, post_id) VALUES (?, ?)",
+		userID, id,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "点赞失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 更新帖子点赞数
+	_, err = tx.Exec("UPDATE posts SET likes = likes + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "点赞失败: " + err.Error(),
+		})
+		return
+	}
+
+	if err = tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "点赞失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取更新后的点赞数
+	var likes int
+	database.DB.QueryRow("SELECT likes FROM posts WHERE id = ?", id).Scan(&likes)
+
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "点赞成功",
+		Data: gin.H{
+			"likes": likes,
+		},
+	})
+}
+
+// UnlikePost 取消点赞帖子
+func UnlikePost(c *gin.Context) {
+	id := c.Param("id")
+	userID, _ := c.Get("user_id")
+
+	// 开始事务
+	tx, err := database.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "取消点赞失败: " + err.Error(),
+		})
+		return
+	}
+	defer tx.Rollback()
+
+	// 删除点赞记录
+	result, err := tx.Exec(
+		"DELETE FROM post_likes WHERE user_id = ? AND post_id = ?",
+		userID, id,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "取消点赞失败: " + err.Error(),
+		})
+		return
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Code:    400,
+			Message: "未点赞该帖子",
+		})
+		return
+	}
+
+	// 更新帖子点赞数
+	_, err = tx.Exec("UPDATE posts SET likes = likes - 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND likes > 0", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "取消点赞失败: " + err.Error(),
+		})
+		return
+	}
+
+	if err = tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "取消点赞失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取更新后的点赞数
+	var likes int
+	database.DB.QueryRow("SELECT likes FROM posts WHERE id = ?", id).Scan(&likes)
+
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "取消点赞成功",
+		Data: gin.H{
+			"likes": likes,
+		},
+	})
+}
+
+// CoinPost 投币帖子
+func CoinPost(c *gin.Context) {
+	id := c.Param("id")
+
+	// 可以从请求体中获取投币数量
+	var req struct {
+		Amount int `json:"amount" binding:"required,min=1,max=10"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req.Amount = 1 // 默认投1个币
+	}
+
+	_, err := database.DB.Exec("UPDATE posts SET coins = coins + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", req.Amount, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "投币失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取更新后的投币数
+	var coins int
+	database.DB.QueryRow("SELECT coins FROM posts WHERE id = ?", id).Scan(&coins)
+
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "投币成功",
+		Data: gin.H{
+			"coins": coins,
+		},
+	})
+}
+
+// GetPostStats 获取帖子统计信息
+func GetPostStats(c *gin.Context) {
+	id := c.Param("id")
+
+	var stats struct {
+		Likes        int `json:"likes"`
+		Favorites    int `json:"favorites"`
+		Coins        int `json:"coins"`
+		CommentCount int `json:"comment_count"`
+		ViewCount    int `json:"view_count"`
+	}
+
+	err := database.DB.QueryRow(
+		"SELECT likes, favorites, coins, comment_count, view_count FROM posts WHERE id = ?",
+		id,
+	).Scan(&stats.Likes, &stats.Favorites, &stats.Coins, &stats.CommentCount, &stats.ViewCount)
+
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, models.Response{
+			Code:    404,
+			Message: "帖子不存在",
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询统计信息失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "获取统计信息成功",
+		Data:    stats,
+	})
+}
