@@ -521,7 +521,7 @@ func DeleteComment(c *gin.Context) {
 	})
 }
 
-// LikeComment 点赞评论
+// LikeComment 点赞/取消点赞评论（切换功能）
 func LikeComment(c *gin.Context) {
 	id := c.Param("id")
 	userID, _ := c.Get("user_id")
@@ -532,10 +532,10 @@ func LikeComment(c *gin.Context) {
 		"SELECT COUNT(*) FROM comment_likes WHERE user_id = ? AND comment_id = ?",
 		userID, id,
 	).Scan(&count)
-	if err == nil && count > 0 {
-		c.JSON(http.StatusBadRequest, models.Response{
-			Code:    400,
-			Message: "已经点赞过该评论",
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询点赞状态失败: " + err.Error(),
 		})
 		return
 	}
@@ -545,39 +545,73 @@ func LikeComment(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Code:    500,
-			Message: "点赞失败: " + err.Error(),
+			Message: "操作失败: " + err.Error(),
 		})
 		return
 	}
 	defer tx.Rollback()
 
-	// 记录点赞
-	_, err = tx.Exec(
-		"INSERT INTO comment_likes (user_id, comment_id) VALUES (?, ?)",
-		userID, id,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
-			Code:    500,
-			Message: "点赞失败: " + err.Error(),
-		})
-		return
-	}
+	var message string
+	var isLiked bool
 
-	// 更新评论点赞数
-	_, err = tx.Exec("UPDATE comments SET likes = likes + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?", id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
-			Code:    500,
-			Message: "点赞失败: " + err.Error(),
-		})
-		return
+	if count > 0 {
+		// 已点赞，执行取消点赞
+		_, err = tx.Exec(
+			"DELETE FROM comment_likes WHERE user_id = ? AND comment_id = ?",
+			userID, id,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "取消点赞失败: " + err.Error(),
+			})
+			return
+		}
+
+		// 减少评论点赞数
+		_, err = tx.Exec("UPDATE comments SET likes = likes - 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND likes > 0", id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "取消点赞失败: " + err.Error(),
+			})
+			return
+		}
+
+		message = "取消点赞成功"
+		isLiked = false
+	} else {
+		// 未点赞，执行点赞
+		_, err = tx.Exec(
+			"INSERT INTO comment_likes (user_id, comment_id) VALUES (?, ?)",
+			userID, id,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "点赞失败: " + err.Error(),
+			})
+			return
+		}
+
+		// 增加评论点赞数
+		_, err = tx.Exec("UPDATE comments SET likes = likes + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?", id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "点赞失败: " + err.Error(),
+			})
+			return
+		}
+
+		message = "点赞成功"
+		isLiked = true
 	}
 
 	if err = tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Code:    500,
-			Message: "点赞失败: " + err.Error(),
+			Message: "操作失败: " + err.Error(),
 		})
 		return
 	}
@@ -588,9 +622,10 @@ func LikeComment(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.Response{
 		Code:    200,
-		Message: "点赞成功",
+		Message: message,
 		Data: gin.H{
-			"likes": likes,
+			"likes":    likes,
+			"is_liked": isLiked,
 		},
 	})
 }

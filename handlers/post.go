@@ -500,7 +500,7 @@ func DeletePost(c *gin.Context) {
 	})
 }
 
-// LikePost 点赞帖子
+// LikePost 点赞/取消点赞帖子（切换功能）
 func LikePost(c *gin.Context) {
 	id := c.Param("id")
 	userID, _ := c.Get("user_id")
@@ -511,10 +511,10 @@ func LikePost(c *gin.Context) {
 		"SELECT COUNT(*) FROM post_likes WHERE user_id = ? AND post_id = ?",
 		userID, id,
 	).Scan(&count)
-	if err == nil && count > 0 {
-		c.JSON(http.StatusBadRequest, models.Response{
-			Code:    400,
-			Message: "已经点赞过该帖子",
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询点赞状态失败: " + err.Error(),
 		})
 		return
 	}
@@ -524,39 +524,73 @@ func LikePost(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Code:    500,
-			Message: "点赞失败: " + err.Error(),
+			Message: "操作失败: " + err.Error(),
 		})
 		return
 	}
 	defer tx.Rollback()
 
-	// 记录点赞
-	_, err = tx.Exec(
-		"INSERT INTO post_likes (user_id, post_id) VALUES (?, ?)",
-		userID, id,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
-			Code:    500,
-			Message: "点赞失败: " + err.Error(),
-		})
-		return
-	}
+	var message string
+	var isLiked bool
 
-	// 更新帖子点赞数
-	_, err = tx.Exec("UPDATE posts SET likes = likes + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?", id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
-			Code:    500,
-			Message: "点赞失败: " + err.Error(),
-		})
-		return
+	if count > 0 {
+		// 已点赞，执行取消点赞
+		_, err = tx.Exec(
+			"DELETE FROM post_likes WHERE user_id = ? AND post_id = ?",
+			userID, id,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "取消点赞失败: " + err.Error(),
+			})
+			return
+		}
+
+		// 减少帖子点赞数
+		_, err = tx.Exec("UPDATE posts SET likes = likes - 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND likes > 0", id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "取消点赞失败: " + err.Error(),
+			})
+			return
+		}
+
+		message = "取消点赞成功"
+		isLiked = false
+	} else {
+		// 未点赞，执行点赞
+		_, err = tx.Exec(
+			"INSERT INTO post_likes (user_id, post_id) VALUES (?, ?)",
+			userID, id,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "点赞失败: " + err.Error(),
+			})
+			return
+		}
+
+		// 增加帖子点赞数
+		_, err = tx.Exec("UPDATE posts SET likes = likes + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?", id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "点赞失败: " + err.Error(),
+			})
+			return
+		}
+
+		message = "点赞成功"
+		isLiked = true
 	}
 
 	if err = tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Code:    500,
-			Message: "点赞失败: " + err.Error(),
+			Message: "操作失败: " + err.Error(),
 		})
 		return
 	}
@@ -567,17 +601,40 @@ func LikePost(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.Response{
 		Code:    200,
-		Message: "点赞成功",
+		Message: message,
 		Data: gin.H{
-			"likes": likes,
+			"likes":    likes,
+			"is_liked": isLiked,
 		},
 	})
 }
 
-// UnlikePost 取消点赞帖子
+// UnlikePost 取消点赞帖子（兼容性API，建议使用LikePost）
 func UnlikePost(c *gin.Context) {
 	id := c.Param("id")
 	userID, _ := c.Get("user_id")
+
+	// 检查是否已点赞
+	var count int
+	err := database.DB.QueryRow(
+		"SELECT COUNT(*) FROM post_likes WHERE user_id = ? AND post_id = ?",
+		userID, id,
+	).Scan(&count)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询点赞状态失败: " + err.Error(),
+		})
+		return
+	}
+
+	if count == 0 {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Code:    400,
+			Message: "未点赞该帖子",
+		})
+		return
+	}
 
 	// 开始事务
 	tx, err := database.DB.Begin()
@@ -591,7 +648,7 @@ func UnlikePost(c *gin.Context) {
 	defer tx.Rollback()
 
 	// 删除点赞记录
-	result, err := tx.Exec(
+	_, err = tx.Exec(
 		"DELETE FROM post_likes WHERE user_id = ? AND post_id = ?",
 		userID, id,
 	)
@@ -599,15 +656,6 @@ func UnlikePost(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Code:    500,
 			Message: "取消点赞失败: " + err.Error(),
-		})
-		return
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		c.JSON(http.StatusBadRequest, models.Response{
-			Code:    400,
-			Message: "未点赞该帖子",
 		})
 		return
 	}
@@ -638,7 +686,8 @@ func UnlikePost(c *gin.Context) {
 		Code:    200,
 		Message: "取消点赞成功",
 		Data: gin.H{
-			"likes": likes,
+			"likes":    likes,
+			"is_liked": false,
 		},
 	})
 }
