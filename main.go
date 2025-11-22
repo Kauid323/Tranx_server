@@ -121,12 +121,13 @@ func main() {
 			// 评论相关
 			comments := authorized.Group("/comments")
 			{
-				comments.POST("/create", handlers.CreateComment) // 创建评论
-				comments.GET("/list", handlers.GetComments)      // 获取评论列表（支持多种排序）
-				comments.PUT("/:id", handlers.UpdateComment)     // 更新评论
-				comments.DELETE("/:id", handlers.DeleteComment)  // 删除评论
-				comments.POST("/:id/like", handlers.LikeComment) // 点赞评论
-				comments.POST("/:id/coin", handlers.CoinComment) // 投币评论
+				comments.POST("/create", handlers.CreateComment)       // 创建评论（支持楼中楼回复）
+				comments.GET("/list", handlers.GetComments)            // 获取评论列表（只显示顶级评论）
+				comments.GET("/:id/replies", handlers.GetCommentReplies) // 获取评论的子回复列表
+				comments.PUT("/:id", handlers.UpdateComment)           // 更新评论
+				comments.DELETE("/:id", handlers.DeleteComment)        // 删除评论
+				comments.POST("/:id/like", handlers.LikeComment)       // 点赞评论
+				comments.POST("/:id/coin", handlers.CoinComment)       // 投币评论
 			}
 
 			// 统计相关

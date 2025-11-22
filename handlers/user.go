@@ -286,7 +286,7 @@ func GetUserDetail(c *gin.Context) {
 
 	// 获取最近发布的帖子（最多10条）
 	rows, err := database.DB.Query(`
-		SELECT id, board_id, user_id, title, content, publisher, publish_time, 
+		SELECT id, board_id, user_id, title, content, type, publisher, publish_time, 
 		       coins, favorites, likes, image_url, attachment_url, attachment_type,
 		       comment_count, view_count, last_reply_time, created_at, updated_at
 		FROM posts
@@ -302,7 +302,7 @@ func GetUserDetail(c *gin.Context) {
 			var post models.Post
 			var imageURL, attachmentURL, attachmentType sql.NullString
 			err := rows.Scan(
-				&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Publisher,
+				&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Type, &post.Publisher,
 				&post.PublishTime, &post.Coins, &post.Favorites, &post.Likes,
 				&imageURL, &attachmentURL, &attachmentType, &post.CommentCount, &post.ViewCount, &post.LastReplyTime,
 				&post.CreatedAt, &post.UpdatedAt,
@@ -324,7 +324,7 @@ func GetUserDetail(c *gin.Context) {
 
 	// 获取最近收藏的帖子（最多10条）
 	rows2, err := database.DB.Query(`
-		SELECT p.id, p.board_id, p.user_id, p.title, p.content, p.publisher, p.publish_time, 
+		SELECT p.id, p.board_id, p.user_id, p.title, p.content, p.type, p.publisher, p.publish_time, 
 		       p.coins, p.favorites, p.likes, p.image_url, p.attachment_url, p.attachment_type,
 		       p.comment_count, p.view_count, p.last_reply_time, p.created_at, p.updated_at
 		FROM favorite_items fi
@@ -342,7 +342,7 @@ func GetUserDetail(c *gin.Context) {
 			var post models.Post
 			var imageURL, attachmentURL, attachmentType sql.NullString
 			err := rows2.Scan(
-				&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Publisher,
+				&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Type, &post.Publisher,
 				&post.PublishTime, &post.Coins, &post.Favorites, &post.Likes,
 				&imageURL, &attachmentURL, &attachmentType, &post.CommentCount, &post.ViewCount, &post.LastReplyTime,
 				&post.CreatedAt, &post.UpdatedAt,

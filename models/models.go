@@ -69,6 +69,7 @@ type Post struct {
 	UserID         int64     `json:"user_id"` // 发布者用户ID
 	Title          string    `json:"title"`
 	Content        string    `json:"content"`
+	Type           string    `json:"type"`            // 帖子类型: "text"(普通文本) 或 "markdown"(Markdown格式)
 	Publisher      string    `json:"publisher"`       // 发布者名称
 	PublishTime    time.Time `json:"publish_time"`    // 发布时间
 	Coins          int       `json:"coins"`           // 投币数
@@ -86,17 +87,21 @@ type Post struct {
 
 // Comment 评论模型
 type Comment struct {
-	ID          int64     `json:"id"`
-	PostID      int64     `json:"post_id"`
-	UserID      int64     `json:"user_id"` // 评论者用户ID
-	Content     string    `json:"content"`
-	Publisher   string    `json:"publisher"`    // 评论者
-	PublishTime time.Time `json:"publish_time"` // 评论时间
-	Likes       int       `json:"likes"`        // 点赞数
-	IsAuthor    bool      `json:"is_author"`    // 是否为楼主
-	Floor       int       `json:"floor"`        // 楼层号
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           int64     `json:"id"`
+	PostID       int64     `json:"post_id"`
+	UserID       int64     `json:"user_id"`       // 评论者用户ID
+	ParentID     *int64    `json:"parent_id"`     // 父评论ID，用于楼中楼回复
+	Content      string    `json:"content"`
+	Publisher    string    `json:"publisher"`     // 评论者用户名
+	Avatar       string    `json:"avatar"`        // 评论者头像URL
+	PublishTime  time.Time `json:"publish_time"`  // 评论时间
+	Likes        int       `json:"likes"`         // 点赞数
+	Coins        int       `json:"coins"`         // 投币数
+	IsAuthor     bool      `json:"is_author"`     // 是否为楼主
+	Floor        int       `json:"floor"`         // 楼层号
+	ReplyCount   int       `json:"reply_count"`   // 子回复数量
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // CreateUserRequest 创建用户请求
@@ -227,13 +232,15 @@ type CreatePostRequest struct {
 	BoardID  int64  `json:"board_id"`                   // 板块ID，不传或传0则默认发到主板块(ID=1)
 	Title    string `json:"title" binding:"required"`
 	Content  string `json:"content" binding:"required"`
+	Type     string `json:"type"`                       // 帖子类型: "text"(默认) 或 "markdown"
 	ImageURL string `json:"image_url"`
 }
 
 // CreateCommentRequest 创建评论请求
 type CreateCommentRequest struct {
-	PostID  int64  `json:"post_id" binding:"required"`
-	Content string `json:"content" binding:"required"`
+	PostID   int64  `json:"post_id" binding:"required"`
+	ParentID *int64 `json:"parent_id"` // 可选，用于楼中楼回复
+	Content  string `json:"content" binding:"required"`
 }
 
 // GetPostsQuery 获取帖子列表查询参数

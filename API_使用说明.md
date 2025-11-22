@@ -486,6 +486,7 @@ Content-Type: application/json
   "board_id": 1,
   "title": "帖子标题",
   "content": "帖子内容",
+  "type": "text",             // 可选，帖子类型："text"(普通文本，默认) 或 "markdown"(Markdown格式)
   "image_url": "http://..."   // 可选
 }
 ```
@@ -523,6 +524,7 @@ Token: <your_token>
         "user_id": 1,
         "title": "帖子标题",
         "content": "帖子内容",
+        "type": "text",              // 帖子类型："text" 或 "markdown"
         "publisher": "testuser",
         "publish_time": "2024-01-01T00:00:00Z",
         "coins": 10,
@@ -600,13 +602,17 @@ Content-Type: application/json
 ```json
 {
   "post_id": 1,
+  "parent_id": null,      // 可选，楼中楼回复时填写父评论ID
   "content": "评论内容"
 }
 ```
 
-**注意：** 评论者信息从Token中自动获取，系统会自动判断是否为楼主
+**注意：** 
+- 评论者信息从Token中自动获取，系统会自动判断是否为楼主
+- 支持楼中楼回复：设置 `parent_id` 为父评论ID即可回复指定评论
+- 顶级评论的 `parent_id` 为 `null`，楼中楼回复的楼层号为0
 
-#### 7.2 获取评论列表
+#### 7.2 获取评论列表（顶级评论）
 ```http
 GET /api/comments/list?post_id=1&sort=default&page=1&page_size=50
 Token: <your_token>
@@ -622,20 +628,64 @@ Token: <your_token>
 - `page`: 页码（默认1）
 - `page_size`: 每页数量（默认50，最大200）
 
-#### 7.3 更新评论
+**说明：** 此API只返回顶级评论（parent_id为null的评论），每个评论包含 `reply_count` 字段表示子回复数量
+
+**响应示例：**
+```json
+{
+  "code": 200,
+  "message": "获取评论列表成功",
+  "data": {
+    "total": 20,
+    "page": 1,
+    "page_size": 50,
+    "list": [
+      {
+        "id": 1,
+        "post_id": 1,
+        "user_id": 2,
+        "parent_id": null,
+        "content": "这是一条顶级评论",
+        "publisher": "testuser",
+        "avatar": "http://example.com/avatar.jpg",
+        "publish_time": "2024-01-01T12:30:00Z",
+        "likes": 5,
+        "coins": 2,
+        "is_author": false,
+        "floor": 1,
+        "reply_count": 3
+      }
+    ]
+  }
+}
+```
+
+#### 7.3 获取评论的子回复列表
+```http
+GET /api/comments/:id/replies?page=1&page_size=20
+Token: <your_token>
+```
+
+**查询参数：**
+- `page`: 页码（默认1）
+- `page_size`: 每页数量（默认20，最大100）
+
+**说明：** 获取指定评论的所有子回复，按时间正序排列
+
+#### 7.4 更新评论
 ```http
 PUT /api/comments/:id
 Token: <your_token>
 Content-Type: application/json
 ```
 
-#### 7.4 删除评论
+#### 7.5 删除评论
 ```http
 DELETE /api/comments/:id
 Token: <your_token>
 ```
 
-#### 7.5 点赞评论
+#### 7.6 点赞评论
 ```http
 POST /api/comments/:id/like
 Token: <your_token>
@@ -645,7 +695,7 @@ Token: <your_token>
 - 每个用户对每个评论只能点赞一次
 - 点赞后会记录到 `comment_likes` 表
 
-#### 7.6 投币评论
+#### 7.7 投币评论
 ```http
 POST /api/comments/:id/coin
 Token: <your_token>
@@ -781,10 +831,17 @@ curl -X GET http://localhost:4999/api/boards/list \
 
 4. **创建帖子**
 ```bash
+# 创建普通文本帖子
 curl -X POST http://localhost:4999/api/posts/create \
   -H "Token: <your_token_here>" \
   -H "Content-Type: application/json" \
-  -d '{"board_id":1,"title":"测试帖子","content":"这是内容"}'
+  -d '{"board_id":1,"title":"测试帖子","content":"这是内容","type":"text"}'
+
+# 创建Markdown格式帖子
+curl -X POST http://localhost:4999/api/posts/create \
+  -H "Token: <your_token_here>" \
+  -H "Content-Type: application/json" \
+  -d '{"board_id":1,"title":"Markdown帖子","content":"# 标题\n这是**加粗**文本","type":"markdown"}'
 ```
 
 ---
@@ -802,6 +859,7 @@ curl -X POST http://localhost:4999/api/posts/create \
 9. 硬币系统用于投币帖子等功能
 10. 关注/粉丝功能支持分页查询
 11. 发帖子每次奖励5经验，不限制次数
+12. 帖子支持两种类型：普通文本(text)和Markdown格式(markdown)，默认为text
 
 ---
 

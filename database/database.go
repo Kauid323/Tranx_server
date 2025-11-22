@@ -121,6 +121,7 @@ func createTables() error {
 		user_id INTEGER NOT NULL,
 		title TEXT NOT NULL,
 		content TEXT NOT NULL,
+		type TEXT DEFAULT 'text',
 		publisher TEXT NOT NULL,
 		publish_time DATETIME DEFAULT CURRENT_TIMESTAMP,
 		coins INTEGER DEFAULT 0,
@@ -144,6 +145,7 @@ func createTables() error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		post_id INTEGER NOT NULL,
 		user_id INTEGER NOT NULL,
+		parent_id INTEGER,
 		content TEXT NOT NULL,
 		publisher TEXT NOT NULL,
 		publish_time DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -151,10 +153,12 @@ func createTables() error {
 		coins INTEGER DEFAULT 0,
 		is_author BOOLEAN DEFAULT 0,
 		floor INTEGER NOT NULL,
+		reply_count INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (post_id) REFERENCES posts(id),
-		FOREIGN KEY (user_id) REFERENCES users(id)
+		FOREIGN KEY (user_id) REFERENCES users(id),
+		FOREIGN KEY (parent_id) REFERENCES comments(id)
 	);`
 
 	// 创建收藏夹表
@@ -235,6 +239,7 @@ func createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_posts_likes ON posts(likes DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments(user_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_comments_parent_id ON comments(parent_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_comments_likes ON comments(likes DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_comments_floor ON comments(floor);`,
 		`CREATE INDEX IF NOT EXISTS idx_favorite_folders_user_id ON favorite_folders(user_id);`,
@@ -298,7 +303,7 @@ func createTables() error {
 	}
 
 	log.Println("数据表创建成功")
-	
+
 	// 创建默认主板块
 	var count int
 	DB.QueryRow("SELECT COUNT(*) FROM boards WHERE id = 1").Scan(&count)
@@ -312,6 +317,6 @@ func createTables() error {
 			log.Println("默认主板块创建成功")
 		}
 	}
-	
+
 	return nil
 }

@@ -27,6 +27,20 @@ func CreatePost(c *gin.Context) {
 		req.BoardID = 1
 	}
 
+	// 如果没有指定类型或类型为空，默认为text
+	if req.Type == "" {
+		req.Type = "text"
+	}
+
+	// 验证类型参数
+	if req.Type != "text" && req.Type != "markdown" {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Code:    400,
+			Message: "帖子类型只能是 'text' 或 'markdown'",
+		})
+		return
+	}
+
 	// 获取当前用户信息
 	userID, _ := c.Get("user_id")
 	username, _ := c.Get("username")
@@ -46,9 +60,9 @@ func CreatePost(c *gin.Context) {
 	
 	// 插入帖子
 	result, err := tx.Exec(
-		`INSERT INTO posts (board_id, user_id, title, content, publisher, publish_time, image_url, last_reply_time) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		req.BoardID, userID, req.Title, req.Content, username, now, req.ImageURL, now,
+		`INSERT INTO posts (board_id, user_id, title, content, type, publisher, publish_time, image_url, last_reply_time) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.BoardID, userID, req.Title, req.Content, req.Type, username, now, req.ImageURL, now,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -150,7 +164,7 @@ func GetPosts(c *gin.Context) {
 	}
 
 	// 构建查询语句
-	baseQuery := "SELECT id, board_id, user_id, title, content, publisher, publish_time, coins, favorites, likes, image_url, attachment_url, attachment_type, comment_count, view_count, last_reply_time, created_at, updated_at FROM posts"
+	baseQuery := "SELECT id, board_id, user_id, title, content, type, publisher, publish_time, coins, favorites, likes, image_url, attachment_url, attachment_type, comment_count, view_count, last_reply_time, created_at, updated_at FROM posts"
 	countQuery := "SELECT COUNT(*) FROM posts"
 	whereClause := " WHERE board_id = ?"
 	orderClause := ""
@@ -202,7 +216,7 @@ func GetPosts(c *gin.Context) {
 		var post models.Post
 		var imageURL, attachmentURL, attachmentType sql.NullString
 		err := rows.Scan(
-			&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Publisher,
+			&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Type, &post.Publisher,
 			&post.PublishTime, &post.Coins, &post.Favorites, &post.Likes,
 			&imageURL, &attachmentURL, &attachmentType, &post.CommentCount, &post.ViewCount, &post.LastReplyTime,
 			&post.CreatedAt, &post.UpdatedAt,
@@ -253,12 +267,12 @@ func GetPostDetail(c *gin.Context) {
 	var post models.Post
 	var imageURL, attachmentURL, attachmentType sql.NullString
 	err := database.DB.QueryRow(
-		`SELECT id, board_id, user_id, title, content, publisher, publish_time, coins, favorites, likes, 
+		`SELECT id, board_id, user_id, title, content, type, publisher, publish_time, coins, favorites, likes, 
 		image_url, attachment_url, attachment_type, comment_count, view_count, last_reply_time, created_at, updated_at 
 		FROM posts WHERE id = ?`,
 		id,
 	).Scan(
-		&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Publisher,
+		&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Type, &post.Publisher,
 		&post.PublishTime, &post.Coins, &post.Favorites, &post.Likes,
 		&imageURL, &attachmentURL, &attachmentType, &post.CommentCount, &post.ViewCount, &post.LastReplyTime,
 		&post.CreatedAt, &post.UpdatedAt,

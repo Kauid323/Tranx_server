@@ -514,7 +514,7 @@ func GetFolderPosts(c *gin.Context) {
 
 	// 查询收藏夹中的帖子
 	rows, err := database.DB.Query(`
-		SELECT p.id, p.board_id, p.user_id, p.title, p.content, p.publisher, p.publish_time, 
+		SELECT p.id, p.board_id, p.user_id, p.title, p.content, p.type, p.publisher, p.publish_time, 
 		       p.coins, p.favorites, p.likes, p.image_url, p.attachment_url, p.attachment_type,
 		       p.comment_count, p.view_count, p.last_reply_time, p.created_at, p.updated_at
 		FROM favorite_items fi
@@ -537,7 +537,7 @@ func GetFolderPosts(c *gin.Context) {
 		var post models.Post
 		var imageURL, attachmentURL, attachmentType sql.NullString
 		err := rows.Scan(
-			&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Publisher,
+			&post.ID, &post.BoardID, &post.UserID, &post.Title, &post.Content, &post.Type, &post.Publisher,
 			&post.PublishTime, &post.Coins, &post.Favorites, &post.Likes,
 			&imageURL, &attachmentURL, &attachmentType, &post.CommentCount, &post.ViewCount, &post.LastReplyTime,
 			&post.CreatedAt, &post.UpdatedAt,
