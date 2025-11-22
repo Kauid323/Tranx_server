@@ -331,6 +331,8 @@ func GetCommentReplies(c *gin.Context) {
 // UpdateComment 更新评论
 func UpdateComment(c *gin.Context) {
 	id := c.Param("id")
+	userID, _ := c.Get("user_id")
+	
 	var req struct {
 		Content string `json:"content" binding:"required"`
 	}
@@ -342,7 +344,34 @@ func UpdateComment(c *gin.Context) {
 		return
 	}
 
-	_, err := database.DB.Exec(
+	// 检查评论是否存在，并验证是否为作者本人
+	var commentUserID int64
+	err := database.DB.QueryRow("SELECT user_id FROM comments WHERE id = ?", id).Scan(&commentUserID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, models.Response{
+			Code:    404,
+			Message: "评论不存在",
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询评论失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 验证权限：只有作者本人才能编辑
+	if commentUserID != userID.(int64) {
+		c.JSON(http.StatusForbidden, models.Response{
+			Code:    403,
+			Message: "无权编辑此评论，只能编辑自己的评论",
+		})
+		return
+	}
+
+	_, err = database.DB.Exec(
 		"UPDATE comments SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 		req.Content, id,
 	)
@@ -363,20 +392,83 @@ func UpdateComment(c *gin.Context) {
 // DeleteComment 删除评论
 func DeleteComment(c *gin.Context) {
 	id := c.Param("id")
+	userID, _ := c.Get("user_id")
 
-	// 获取评论所属的帖子ID
-	var postID int64
-	err := database.DB.QueryRow("SELECT post_id FROM comments WHERE id = ?", id).Scan(&postID)
-	if err != nil {
+	// 获取评论信息，验证是否为作者本人
+	var commentUserID, postID int64
+	var parentID sql.NullInt64
+	err := database.DB.QueryRow(
+		"SELECT user_id, post_id, parent_id FROM comments WHERE id = ?", 
+		id,
+	).Scan(&commentUserID, &postID, &parentID)
+	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, models.Response{
 			Code:    404,
 			Message: "评论不存在",
 		})
 		return
 	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询评论失败: " + err.Error(),
+		})
+		return
+	}
 
-	// 删除评论
-	_, err = database.DB.Exec("DELETE FROM comments WHERE id = ?", id)
+	// 验证权限：只有作者本人才能删除
+	if commentUserID != userID.(int64) {
+		c.JSON(http.StatusForbidden, models.Response{
+			Code:    403,
+			Message: "无权删除此评论，只能删除自己的评论",
+		})
+		return
+	}
+
+	// 开始事务
+	tx, err := database.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除评论失败: " + err.Error(),
+		})
+		return
+	}
+	defer tx.Rollback()
+
+	// 1. 删除该评论的所有子回复的点赞记录
+	_, err = tx.Exec("DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE parent_id = ?)", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除子回复点赞记录失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 2. 删除该评论的所有子回复
+	subCommentsResult, err := tx.Exec("DELETE FROM comments WHERE parent_id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除子回复失败: " + err.Error(),
+		})
+		return
+	}
+	subCommentsCount, _ := subCommentsResult.RowsAffected()
+
+	// 3. 删除该评论的点赞记录
+	_, err = tx.Exec("DELETE FROM comment_likes WHERE comment_id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除评论点赞记录失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 4. 删除评论本身
+	_, err = tx.Exec("DELETE FROM comments WHERE id = ?", id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Code:    500,
@@ -385,12 +477,47 @@ func DeleteComment(c *gin.Context) {
 		return
 	}
 
-	// 更新帖子的评论数
-	database.DB.Exec("UPDATE posts SET comment_count = comment_count - 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?", postID)
+	// 5. 如果是楼中楼回复，更新父评论的回复数
+	if parentID.Valid {
+		_, err = tx.Exec("UPDATE comments SET reply_count = reply_count - 1 WHERE id = ? AND reply_count > 0", parentID.Int64)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "更新父评论回复数失败: " + err.Error(),
+			})
+			return
+		}
+	}
+
+	// 6. 更新帖子的评论数（包括删除的子回复数量）
+	totalDeletedComments := 1 + subCommentsCount // 主评论 + 子回复数量
+	_, err = tx.Exec(
+		"UPDATE posts SET comment_count = comment_count - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND comment_count >= ?", 
+		totalDeletedComments, postID, totalDeletedComments,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "更新帖子评论数失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 提交事务
+	if err = tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除评论失败: " + err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, models.Response{
 		Code:    200,
 		Message: "删除评论成功",
+		Data: gin.H{
+			"deleted_replies": subCommentsCount,
+		},
 	})
 }
 
@@ -492,7 +619,25 @@ func CoinComment(c *gin.Context) {
 	}
 	defer tx.Rollback()
 
-	// 检查用户硬币是否足够
+	// 检查评论是否存在，并获取评论作者ID
+	var commentUserID int64
+	err = tx.QueryRow("SELECT user_id FROM comments WHERE id = ?", id).Scan(&commentUserID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, models.Response{
+			Code:    404,
+			Message: "评论不存在",
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询评论失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 检查投币者硬币是否足够
 	var userCoins int
 	err = tx.QueryRow("SELECT coins FROM users WHERE id = ?", userID).Scan(&userCoins)
 	if err != nil {
@@ -511,14 +656,27 @@ func CoinComment(c *gin.Context) {
 		return
 	}
 
-	// 扣除用户硬币
-	_, err = tx.Exec("UPDATE users SET coins = coins - ? WHERE id = ?", req.Amount, userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Response{
-			Code:    500,
-			Message: "扣除硬币失败: " + err.Error(),
-		})
-		return
+	// 如果不是给自己投币，则进行硬币转移
+	if commentUserID != userID.(int64) {
+		// 扣除投币者硬币
+		_, err = tx.Exec("UPDATE users SET coins = coins - ? WHERE id = ?", req.Amount, userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "扣除硬币失败: " + err.Error(),
+			})
+			return
+		}
+
+		// 给评论作者增加硬币
+		_, err = tx.Exec("UPDATE users SET coins = coins + ? WHERE id = ?", req.Amount, commentUserID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "增加作者硬币失败: " + err.Error(),
+			})
+			return
+		}
 	}
 
 	// 更新评论投币数

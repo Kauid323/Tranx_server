@@ -313,6 +313,8 @@ func GetPostDetail(c *gin.Context) {
 // UpdatePost 更新帖子
 func UpdatePost(c *gin.Context) {
 	id := c.Param("id")
+	userID, _ := c.Get("user_id")
+	
 	var req models.CreatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.Response{
@@ -322,9 +324,48 @@ func UpdatePost(c *gin.Context) {
 		return
 	}
 
-	_, err := database.DB.Exec(
-		"UPDATE posts SET title = ?, content = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-		req.Title, req.Content, req.ImageURL, id,
+	// 检查帖子是否存在，并验证是否为作者本人
+	var postUserID int64
+	err := database.DB.QueryRow("SELECT user_id FROM posts WHERE id = ?", id).Scan(&postUserID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, models.Response{
+			Code:    404,
+			Message: "帖子不存在",
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询帖子失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 验证权限：只有作者本人才能编辑
+	if postUserID != userID.(int64) {
+		c.JSON(http.StatusForbidden, models.Response{
+			Code:    403,
+			Message: "无权编辑此帖子，只能编辑自己的帖子",
+		})
+		return
+	}
+
+	// 验证并设置帖子类型
+	if req.Type == "" {
+		req.Type = "text"
+	}
+	if req.Type != "text" && req.Type != "markdown" {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Code:    400,
+			Message: "帖子类型只能是 'text' 或 'markdown'",
+		})
+		return
+	}
+
+	_, err = database.DB.Exec(
+		"UPDATE posts SET title = ?, content = ?, type = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		req.Title, req.Content, req.Type, req.ImageURL, id,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -343,13 +384,109 @@ func UpdatePost(c *gin.Context) {
 // DeletePost 删除帖子
 func DeletePost(c *gin.Context) {
 	id := c.Param("id")
+	userID, _ := c.Get("user_id")
 
-	// 删除帖子的所有评论
-	database.DB.Exec("DELETE FROM comments WHERE post_id = ?", id)
-
-	// 删除帖子
-	_, err := database.DB.Exec("DELETE FROM posts WHERE id = ?", id)
+	// 检查帖子是否存在，并验证是否为作者本人
+	var postUserID int64
+	err := database.DB.QueryRow("SELECT user_id FROM posts WHERE id = ?", id).Scan(&postUserID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, models.Response{
+			Code:    404,
+			Message: "帖子不存在",
+		})
+		return
+	}
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询帖子失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 验证权限：只有作者本人才能删除
+	if postUserID != userID.(int64) {
+		c.JSON(http.StatusForbidden, models.Response{
+			Code:    403,
+			Message: "无权删除此帖子，只能删除自己的帖子",
+		})
+		return
+	}
+
+	// 开始事务
+	tx, err := database.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除帖子失败: " + err.Error(),
+		})
+		return
+	}
+	defer tx.Rollback()
+
+	// 删除帖子相关的所有数据
+	// 1. 删除帖子的所有评论点赞记录
+	_, err = tx.Exec("DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除评论点赞记录失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 2. 删除帖子的所有评论
+	_, err = tx.Exec("DELETE FROM comments WHERE post_id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除评论失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 3. 删除帖子点赞记录
+	_, err = tx.Exec("DELETE FROM post_likes WHERE post_id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除帖子点赞记录失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 4. 删除收藏记录
+	_, err = tx.Exec("DELETE FROM favorite_items WHERE post_id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除收藏记录失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 5. 删除浏览历史记录
+	_, err = tx.Exec("DELETE FROM view_histories WHERE post_id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除浏览历史失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 6. 最后删除帖子本身
+	_, err = tx.Exec("DELETE FROM posts WHERE id = ?", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "删除帖子失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 提交事务
+	if err = tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Code:    500,
 			Message: "删除帖子失败: " + err.Error(),
@@ -509,6 +646,7 @@ func UnlikePost(c *gin.Context) {
 // CoinPost 投币帖子
 func CoinPost(c *gin.Context) {
 	id := c.Param("id")
+	userID, _ := c.Get("user_id")
 
 	// 可以从请求体中获取投币数量
 	var req struct {
@@ -518,8 +656,89 @@ func CoinPost(c *gin.Context) {
 		req.Amount = 1 // 默认投1个币
 	}
 
-	_, err := database.DB.Exec("UPDATE posts SET coins = coins + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", req.Amount, id)
+	// 开始事务
+	tx, err := database.DB.Begin()
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "投币失败: " + err.Error(),
+		})
+		return
+	}
+	defer tx.Rollback()
+
+	// 检查帖子是否存在，并获取帖子作者ID
+	var postUserID int64
+	err = tx.QueryRow("SELECT user_id FROM posts WHERE id = ?", id).Scan(&postUserID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, models.Response{
+			Code:    404,
+			Message: "帖子不存在",
+		})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询帖子失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 检查投币者硬币是否足够
+	var userCoins int
+	err = tx.QueryRow("SELECT coins FROM users WHERE id = ?", userID).Scan(&userCoins)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询硬币失败: " + err.Error(),
+		})
+		return
+	}
+
+	if userCoins < req.Amount {
+		c.JSON(http.StatusBadRequest, models.Response{
+			Code:    400,
+			Message: "硬币不足",
+		})
+		return
+	}
+
+	// 如果不是给自己投币，则进行硬币转移
+	if postUserID != userID.(int64) {
+		// 扣除投币者硬币
+		_, err = tx.Exec("UPDATE users SET coins = coins - ? WHERE id = ?", req.Amount, userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "扣除硬币失败: " + err.Error(),
+			})
+			return
+		}
+
+		// 给帖子作者增加硬币
+		_, err = tx.Exec("UPDATE users SET coins = coins + ? WHERE id = ?", req.Amount, postUserID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Response{
+				Code:    500,
+				Message: "增加作者硬币失败: " + err.Error(),
+			})
+			return
+		}
+	}
+
+	// 更新帖子投币数
+	_, err = tx.Exec("UPDATE posts SET coins = coins + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", req.Amount, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "投币失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 提交事务
+	if err = tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Code:    500,
 			Message: "投币失败: " + err.Error(),
@@ -535,7 +754,8 @@ func CoinPost(c *gin.Context) {
 		Code:    200,
 		Message: "投币成功",
 		Data: gin.H{
-			"coins": coins,
+			"coins":      coins,
+			"user_coins": userCoins - req.Amount,
 		},
 	})
 }

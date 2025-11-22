@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // RC4Key RC4加密的密钥
@@ -53,10 +55,18 @@ func RC4Decrypt(ciphertext string) (string, error) {
 	return string(plaintext), nil
 }
 
-// HashPassword 密码哈希
-func HashPassword(password string) string {
-	hash := md5.Sum([]byte(password + "TaruApp_Salt"))
-	return hex.EncodeToString(hash[:])
+// HashPassword 使用bcrypt加密密码
+func HashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+// VerifyPassword 验证密码
+func VerifyPassword(hashedPassword, password string) error {
+	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 }
 
 // CalculateUserLevel 根据经验值计算用户等级

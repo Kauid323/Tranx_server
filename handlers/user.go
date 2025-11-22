@@ -60,7 +60,14 @@ func Register(c *gin.Context) {
 	}
 
 	// 密码哈希
-	hashedPassword := utils.HashPassword(req.Password)
+	hashedPassword, err := utils.HashPassword(req.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "密码加密失败: " + err.Error(),
+		})
+		return
+	}
 
 	// 创建用户
 	result, err := database.DB.Exec(
@@ -97,13 +104,13 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// 验证用户
-	hashedPassword := utils.HashPassword(req.Password)
+	// 验证用户 - 先根据用户名查询用户信息
 	var user models.User
+	var storedPassword string
 	err := database.DB.QueryRow(
-		"SELECT id, username, email, level, avatar, coins, exp, user_level, created_at FROM users WHERE username = ? AND password = ?",
-		req.Username, hashedPassword,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.Level, &user.Avatar, &user.Coins, &user.Exp, &user.UserLevel, &user.CreatedAt)
+		"SELECT id, username, password, email, level, avatar, coins, exp, user_level, created_at FROM users WHERE username = ?",
+		req.Username,
+	).Scan(&user.ID, &user.Username, &storedPassword, &user.Email, &user.Level, &user.Avatar, &user.Coins, &user.Exp, &user.UserLevel, &user.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusUnauthorized, models.Response{
@@ -116,6 +123,16 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.Response{
 			Code:    500,
 			Message: "登录失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 验证密码
+	err = utils.VerifyPassword(storedPassword, req.Password)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, models.Response{
+			Code:    401,
+			Message: "用户名或密码错误",
 		})
 		return
 	}
