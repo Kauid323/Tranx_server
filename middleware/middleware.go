@@ -125,6 +125,33 @@ func AdminRequired() gin.HandlerFunc {
 	}
 }
 
+// ReviewerRequired 审核权限中间件
+func ReviewerRequired() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		levelValue, exists := c.Get("level")
+		if !exists {
+			c.JSON(403, models.Response{
+				Code:    403,
+				Message: "未授权访问",
+			})
+			c.Abort()
+			return
+		}
+
+		// level >= 80 表示有审核权限
+		if levelValue.(int) < 80 {
+			c.JSON(403, models.Response{
+				Code:    403,
+				Message: "需要审核权限",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // RateLimiter 简单的限流中间件
 func RateLimiter() gin.HandlerFunc {
 	// 这里可以实现更复杂的限流逻辑

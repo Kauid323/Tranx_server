@@ -165,15 +165,17 @@ func GetAppDetail(c *gin.Context) {
 
 	// 首先获取应用基本信息
 	var app models.App
-	var mainCategory, subCategory sql.NullString
+	var mainCategory, subCategory, channel, shareDesc, developerName, adLevel, paymentType, operationType sql.NullString
 	err := database.DB.QueryRow(
 		`SELECT id, package_name, name, icon_url, description, tags, main_category, sub_category,
+			channel, share_desc, developer_name, ad_level, payment_type, operation_type,
 			rating, rating_count, total_coins, download_count 
 		FROM apps WHERE package_name = ?`,
 		packageName,
 	).Scan(
 		&app.ID, &app.PackageName, &app.Name, &app.IconURL, &app.Description,
-		&app.Tags, &mainCategory, &subCategory, &app.Rating, &app.RatingCount,
+		&app.Tags, &mainCategory, &subCategory, &channel, &shareDesc, &developerName,
+		&adLevel, &paymentType, &operationType, &app.Rating, &app.RatingCount, 
 		&app.TotalCoins, &app.DownloadCount,
 	)
 
@@ -279,6 +281,12 @@ func GetAppDetail(c *gin.Context) {
 		UpdateTime:    version.CreatedAt.Format("2006-01-02 15:04:05"),
 		MainCategory:  mainCategory.String,
 		SubCategory:   subCategory.String,
+		Channel:       channel.String,
+		ShareDesc:     shareDesc.String,
+		DeveloperName: developerName.String,
+		AdLevel:       adLevel.String,
+		PaymentType:   paymentType.String,
+		OperationType: operationType.String,
 	}
 
 	c.JSON(http.StatusOK, models.Response{

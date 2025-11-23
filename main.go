@@ -49,12 +49,16 @@ func main() {
 		// 应用市场路由（不需要认证）
 		apps := api.Group("/apps")
 		{
-			apps.GET("", handlers.GetApps)                             // 获取应用列表
-			apps.GET("/categories", handlers.GetMainCategories)        // 获取所有大分类
-			apps.GET("/subcategories", handlers.GetSubCategories)      // 获取指定大分类下的小分类
-			apps.GET("/category", handlers.GetAppsByCategory)          // 根据分类获取应用列表
-			apps.GET("/:package_name", handlers.GetAppDetail)          // 获取应用详情
-			apps.POST("/:package_name/download", handlers.DownloadApp) // 记录下载
+			apps.GET("", handlers.GetApps)                              // 获取应用列表
+			apps.GET("/categories", handlers.GetMainCategories)         // 获取所有大分类
+			apps.GET("/subcategories", handlers.GetSubCategories)       // 获取指定大分类下的小分类
+			apps.GET("/category", handlers.GetAppsByCategory)           // 根据分类获取应用列表
+			apps.GET("/channels", handlers.GetAppChannels)              // 获取应用渠道选项
+			apps.GET("/ad-levels", handlers.GetAppAdLevels)             // 获取广告级别选项
+			apps.GET("/payment-types", handlers.GetAppPaymentTypes)     // 获取付费类型选项
+			apps.GET("/operation-types", handlers.GetAppOperationTypes) // 获取运营方式选项
+			apps.GET("/:package_name", handlers.GetAppDetail)           // 获取应用详情
+			apps.POST("/:package_name/download", handlers.DownloadApp)  // 记录下载
 		}
 
 		// 需要认证的路由
@@ -90,6 +94,19 @@ func main() {
 
 			// 应用市场（需要登录的部分）
 			authorized.POST("/apps/:package_name/coin", handlers.CoinApp) // 给应用投币
+
+			// 应用上传相关
+			authorized.POST("/apps/upload", handlers.UploadApp)                  // 上传应用
+			authorized.GET("/apps/my-uploads", handlers.GetMyUploadTasks)        // 获取我的上传任务
+			authorized.GET("/apps/upload/:task_id", handlers.GetAppUploadDetail) // 获取上传任务详情
+
+			// 审核相关（需要审核权限）
+			reviewer := authorized.Group("")
+			reviewer.Use(middleware.ReviewerRequired())
+			{
+				reviewer.GET("/apps/pending", handlers.GetPendingApps) // 获取待审核应用
+				reviewer.POST("/apps/review", handlers.ReviewApp)      // 审核应用
+			}
 
 			// 关注系统
 			follow := authorized.Group("/follow")

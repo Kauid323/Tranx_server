@@ -337,8 +337,14 @@ type AppDetail struct {
 	UploaderName  string   `json:"uploader_name"`
 	UpdateContent string   `json:"update_content"`
 	UpdateTime    string   `json:"update_time"`
-	MainCategory  string   `json:"main_category"` // 大分类
-	SubCategory   string   `json:"sub_category"`  // 小分类
+	MainCategory  string   `json:"main_category"`  // 大分类
+	SubCategory   string   `json:"sub_category"`   // 小分类
+	Channel       string   `json:"channel"`        // 渠道
+	ShareDesc     string   `json:"share_desc"`     // 分享说明
+	DeveloperName string   `json:"developer_name"` // 开发者名称
+	AdLevel       string   `json:"ad_level"`       // 广告级别
+	PaymentType   string   `json:"payment_type"`   // 付费类型
+	OperationType string   `json:"operation_type"` // 运营方式
 }
 
 // GetAppsQuery 获取应用列表查询参数
@@ -367,4 +373,88 @@ type GetAppsByCategoryQuery struct {
 	Sort         string `form:"sort"`                             // 排序方式
 	Page         int    `form:"page"`                             // 页码
 	PageSize     int    `form:"page_size"`                        // 每页数量
+}
+
+// AppUploadTask 应用上传任务
+type AppUploadTask struct {
+	ID            int64      `json:"id"`
+	UserID        int64      `json:"user_id"`
+	PackageName   string     `json:"package_name"`
+	Name          string     `json:"name"`
+	IconURL       string     `json:"icon_url"`
+	Version       string     `json:"version"`
+	VersionCode   int        `json:"version_code"`
+	Size          int64      `json:"size"`
+	Channel       string     `json:"channel"` // 官方版、国际版、测试版、定制版
+	MainCategory  string     `json:"main_category"`
+	SubCategory   string     `json:"sub_category"`
+	Screenshots   string     `json:"screenshots"` // JSON数组
+	Description   string     `json:"description"`
+	ShareDesc     string     `json:"share_desc"` // 分享说明
+	UpdateContent string     `json:"update_content"`
+	DeveloperName string     `json:"developer_name"`
+	AdLevel       string     `json:"ad_level"`       // 无广告、少量广告、超多广告、广告软件
+	PaymentType   string     `json:"payment_type"`   // 免费、内购、少量内购、不给钱不让用
+	OperationType string     `json:"operation_type"` // 团队开发、独立开发、开源软件
+	DownloadURL   string     `json:"download_url"`
+	Status        string     `json:"status"`        // pending、rejected、approved
+	RejectReason  string     `json:"reject_reason"` // 拒绝原因
+	ReviewerID    *int64     `json:"reviewer_id"`   // 审核员ID
+	ReviewTime    *time.Time `json:"review_time"`   // 审核时间
+	UploaderName  string     `json:"uploader_name"` // 上传者用户名
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// UploadAppRequest 上传应用请求
+type UploadAppRequest struct {
+	PackageName   string   `json:"package_name" binding:"required"`
+	Name          string   `json:"name" binding:"required"`
+	IconURL       string   `json:"icon_url" binding:"required"`
+	Version       string   `json:"version" binding:"required"`
+	VersionCode   int      `json:"version_code" binding:"required"`
+	Size          int64    `json:"size" binding:"required"`
+	Channel       string   `json:"channel" binding:"required,oneof=official international test custom"`
+	MainCategory  string   `json:"main_category" binding:"required"`
+	SubCategory   string   `json:"sub_category" binding:"required"`
+	Screenshots   []string `json:"screenshots" binding:"required"`
+	Description   string   `json:"description" binding:"required"`
+	ShareDesc     string   `json:"share_desc"`
+	UpdateContent string   `json:"update_content" binding:"required"`
+	DeveloperName string   `json:"developer_name" binding:"required"`
+	AdLevel       string   `json:"ad_level" binding:"required,oneof=none few many adware"`
+	PaymentType   string   `json:"payment_type" binding:"required,oneof=free iap few_iap paid"`
+	OperationType string   `json:"operation_type" binding:"required,oneof=team indie opensource"`
+	DownloadURL   string   `json:"download_url" binding:"required"`
+}
+
+// ReviewAppRequest 审核应用请求
+type ReviewAppRequest struct {
+	TaskID       int64  `json:"task_id" binding:"required"`
+	Accept       int    `json:"accept" binding:"oneof=0 1"` // 0: 拒绝, 1: 通过
+	RejectReason string `json:"reject_reason"`              // 拒绝原因（拒绝时必填）
+}
+
+// AppChannel 应用渠道
+type AppChannel struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// AppAdLevel 广告级别
+type AppAdLevel struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// AppPaymentType 付费类型
+type AppPaymentType struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// AppOperationType 运营方式
+type AppOperationType struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }

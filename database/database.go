@@ -249,6 +249,12 @@ func createTables() error {
 				tags TEXT,
 				main_category TEXT,
 				sub_category TEXT,
+				channel TEXT,
+				share_desc TEXT,
+				developer_name TEXT,
+				ad_level TEXT,
+				payment_type TEXT,
+				operation_type TEXT,
 				rating REAL DEFAULT 0,
 				rating_count INTEGER DEFAULT 0,
 				total_coins INTEGER DEFAULT 0,
@@ -278,6 +284,39 @@ func createTables() error {
 				UNIQUE(package_name, version),
 				FOREIGN KEY (app_id) REFERENCES apps(id),
 				FOREIGN KEY (uploader_id) REFERENCES users(id)
+			);`,
+		},
+		{
+			Name: "app_upload_tasks",
+			SQL: `CREATE TABLE IF NOT EXISTS app_upload_tasks (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL,
+				package_name TEXT NOT NULL,
+				name TEXT NOT NULL,
+				icon_url TEXT NOT NULL,
+				version TEXT NOT NULL,
+				version_code INTEGER NOT NULL,
+				size INTEGER NOT NULL,
+				channel TEXT NOT NULL,
+				main_category TEXT NOT NULL,
+				sub_category TEXT NOT NULL,
+				screenshots TEXT,
+				description TEXT,
+				share_desc TEXT,
+				update_content TEXT,
+				developer_name TEXT NOT NULL,
+				ad_level TEXT NOT NULL,
+				payment_type TEXT NOT NULL,
+				operation_type TEXT NOT NULL,
+				download_url TEXT NOT NULL,
+				status TEXT DEFAULT 'pending',
+				reject_reason TEXT,
+				reviewer_id INTEGER,
+				review_time DATETIME,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (user_id) REFERENCES users(id),
+				FOREIGN KEY (reviewer_id) REFERENCES users(id)
 			);`,
 		},
 	}
@@ -377,6 +416,10 @@ func createIndexes() error {
 		`CREATE INDEX IF NOT EXISTS idx_app_versions_package_name ON app_versions(package_name);`,
 		`CREATE INDEX IF NOT EXISTS idx_app_versions_version_code ON app_versions(version_code DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_app_versions_is_latest ON app_versions(is_latest);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_upload_tasks_user_id ON app_upload_tasks(user_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_upload_tasks_status ON app_upload_tasks(status);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_upload_tasks_package_name ON app_upload_tasks(package_name);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_upload_tasks_created_at ON app_upload_tasks(created_at DESC);`,
 	}
 
 	for _, index := range indexes {
@@ -531,6 +574,12 @@ func repairAppsTable() error {
 	}{
 		{"main_category", "TEXT", ""},
 		{"sub_category", "TEXT", ""},
+		{"channel", "TEXT", ""},
+		{"share_desc", "TEXT", ""},
+		{"developer_name", "TEXT", ""},
+		{"ad_level", "TEXT", ""},
+		{"payment_type", "TEXT", ""},
+		{"operation_type", "TEXT", ""},
 	}
 
 	for _, col := range columns {

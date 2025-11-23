@@ -1558,6 +1558,27 @@ GET /api/apps/:package_name
 **查询参数：**
 - `version` (可选): 指定版本号，不传则返回最新版本
 
+**返回字段说明：**
+- `channel`: 应用渠道
+  - `official`: 官方版
+  - `international`: 国际版
+  - `test`: 测试版
+  - `custom`: 定制版
+- `ad_level`: 广告级别
+  - `none`: 无广告
+  - `few`: 少量广告
+  - `many`: 超多广告
+  - `adware`: 广告软件
+- `payment_type`: 付费类型
+  - `free`: 免费
+  - `iap`: 内购
+  - `few_iap`: 少量内购
+  - `paid`: 不给钱不让用
+- `operation_type`: 运营方式
+  - `team`: 团队开发
+  - `indie`: 独立开发
+  - `opensource`: 开源软件
+
 **响应：**
 ```json
 {
@@ -1585,7 +1606,13 @@ GET /api/apps/:package_name
     "update_content": "1. 修复了一些bug\n2. 优化了性能\n3. 新增了XX功能",
     "update_time": "2024-01-15 10:30:00",
     "main_category": "动作冒险",
-    "sub_category": "网游RPG"
+    "sub_category": "网游RPG",
+    "channel": "official",          // 渠道：official/international/test/custom
+    "share_desc": "分享给朋友的描述",
+    "developer_name": "开发者名称",
+    "ad_level": "none",             // 广告级别：none/few/many/adware
+    "payment_type": "free",         // 付费类型：free/iap/few_iap/paid
+    "operation_type": "indie"       // 运营方式：team/indie/opensource
   }
 }
 ```
@@ -1638,6 +1665,305 @@ POST /api/apps/:package_name/download
   "message": "下载记录成功"
 }
 ```
+
+---
+
+## 16. 应用上传与审核 API
+
+### 16.1 获取应用渠道选项
+```http
+GET /api/apps/channels
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取应用渠道成功",
+  "data": [
+    {"value": "official", "label": "官方版"},
+    {"value": "international", "label": "国际版"},
+    {"value": "test", "label": "测试版"},
+    {"value": "custom", "label": "定制版"}
+  ]
+}
+```
+
+### 16.2 获取广告级别选项
+```http
+GET /api/apps/ad-levels
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取广告级别成功",
+  "data": [
+    {"value": "none", "label": "无广告"},
+    {"value": "few", "label": "少量广告"},
+    {"value": "many", "label": "超多广告"},
+    {"value": "adware", "label": "广告软件"}
+  ]
+}
+```
+
+### 16.3 获取付费类型选项
+```http
+GET /api/apps/payment-types
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取付费类型成功",
+  "data": [
+    {"value": "free", "label": "免费"},
+    {"value": "iap", "label": "内购"},
+    {"value": "few_iap", "label": "少量内购"},
+    {"value": "paid", "label": "不给钱不让用"}
+  ]
+}
+```
+
+### 16.4 获取运营方式选项
+```http
+GET /api/apps/operation-types
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取运营方式成功",
+  "data": [
+    {"value": "team", "label": "团队开发"},
+    {"value": "indie", "label": "独立开发"},
+    {"value": "opensource", "label": "开源软件"}
+  ]
+}
+```
+
+### 16.5 上传应用
+```http
+POST /api/apps/upload
+Token: <your_token>
+Content-Type: application/json
+```
+
+**请求体：**
+```json
+{
+  "package_name": "com.example.app",
+  "name": "示例应用",
+  "icon_url": "https://example.com/icon.png",
+  "version": "1.0.0",
+  "version_code": 10000,
+  "size": 10485760,
+  "channel": "official",
+  "main_category": "实用工具",
+  "sub_category": "系统",
+  "screenshots": [
+    "https://example.com/screenshot1.png",
+    "https://example.com/screenshot2.png"
+  ],
+  "description": "这是一个示例应用的详细介绍...",
+  "share_desc": "分享给朋友的描述",
+  "update_content": "1. 初始版本\n2. 基础功能实现",
+  "developer_name": "开发者名称",
+  "ad_level": "none",
+  "payment_type": "free",
+  "operation_type": "indie",
+  "download_url": "https://example.com/app.apk"
+}
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "应用上传成功，等待审核",
+  "data": {
+    "task_id": 1,
+    "status": "pending",
+    "uploader": "testuser",
+    "upload_time": "2024-01-15 10:30:00"
+  }
+}
+```
+
+### 16.6 获取我的上传任务
+```http
+GET /api/apps/my-uploads?page=1&page_size=20
+Token: <your_token>
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取上传任务成功",
+  "data": {
+    "total": 5,
+    "page": 1,
+    "page_size": 20,
+    "list": [
+      {
+        "task_id": 1,
+        "package_name": "com.example.app",
+        "name": "示例应用",
+        "icon_url": "https://example.com/icon.png",
+        "version": "1.0.0",
+        "status": "pending",
+        "status_label": "待审核",
+        "upload_time": "2024-01-15 10:30:00"
+      }
+    ]
+  }
+}
+```
+
+### 16.7 获取上传任务详情
+```http
+GET /api/apps/upload/:task_id
+Token: <your_token>
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取任务详情成功",
+  "data": {
+    "task_id": 1,
+    "package_name": "com.example.app",
+    "name": "示例应用",
+    "icon_url": "https://example.com/icon.png",
+    "version": "1.0.0",
+    "version_code": 10000,
+    "size": 10485760,
+    "channel": "official",
+    "main_category": "实用工具",
+    "sub_category": "系统",
+    "screenshots": [...],
+    "description": "...",
+    "status": "pending",
+    "upload_time": "2024-01-15 10:30:00"
+  }
+}
+```
+
+### 16.8 获取待审核应用列表（需要审核权限）
+```http
+GET /api/apps/pending?page=1&page_size=20
+Token: <reviewer_token>
+```
+
+**权限要求：**
+- 用户 level >= 80（审核权限）
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取待审核应用成功",
+  "data": {
+    "total": 10,
+    "page": 1,
+    "page_size": 20,
+    "list": [
+      {
+        "task_id": 1,
+        "package_name": "com.example.app",
+        "name": "示例应用",
+        "icon_url": "https://example.com/icon.png",
+        "version": "1.0.0",
+        "upload_time": "2024-01-15 10:30:00",
+        "uploader": "testuser",
+        "uploader_id": 123
+      }
+    ]
+  }
+}
+```
+
+### 16.9 审核应用（需要审核权限）
+```http
+POST /api/apps/review
+Token: <reviewer_token>
+Content-Type: application/json
+```
+
+**权限要求：**
+- 用户 level >= 80（审核权限）
+
+**请求体（通过审核）：**
+```json
+{
+  "task_id": 1,
+  "accept": 1
+}
+```
+
+**请求体（拒绝审核）：**
+```json
+{
+  "task_id": 1,
+  "accept": 0,
+  "reject_reason": "应用描述不符合规范，请修改后重新提交"
+}
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "应用审核通过",  // 或 "应用审核拒绝"
+  "data": {
+    "task_id": 1,
+    "status": "approved",  // 或 "rejected"
+    "review_time": "2024-01-15 11:00:00"
+  }
+}
+```
+
+---
+
+## 应用上传与审核功能说明
+
+### 上传流程
+
+1. **上传应用**
+   - 用户需要登录才能上传应用
+   - 填写完整的应用信息（名称、包名、版本、分类等）
+   - 上传后生成审核任务，状态为"待审核"
+
+2. **查看上传记录**
+   - 用户可以查看自己的所有上传任务
+   - 查看每个任务的审核状态（待审核/已通过/被拒绝）
+   - 被拒绝的任务会显示拒绝原因
+
+### 审核流程
+
+1. **审核权限**
+   - 需要用户 level >= 80 才能进行审核
+   - 审核员可以查看所有待审核的应用
+
+2. **审核操作**
+   - 通过审核：应用会被添加到应用市场
+   - 拒绝审核：需要提供拒绝原因，用户可以查看并修改后重新提交
+
+3. **审核后处理**
+   - 通过审核的应用会自动创建或更新应用信息
+   - 新版本会自动标记为最新版本
+   - 应用立即在应用市场中可见
+
+### 状态说明
+
+- **pending（待审核）**：刚上传，等待审核
+- **approved（已通过）**：审核通过，已发布到应用市场
+- **rejected（被拒绝）**：审核未通过，需要修改后重新提交
 
 ---
 
