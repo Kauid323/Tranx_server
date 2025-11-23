@@ -202,6 +202,12 @@ func GetComments(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户ID（如果已登录）
+	var currentUserID int64
+	if userID, exists := c.Get("user_id"); exists {
+		currentUserID = userID.(int64)
+	}
+
 	// 查询评论列表
 	rows, err := database.DB.Query(
 		baseQuery+orderClause+limitClause,
@@ -228,11 +234,24 @@ func GetComments(c *gin.Context) {
 		if err != nil {
 			continue
 		}
-		
+
 		if parentID.Valid {
 			comment.ParentID = &parentID.Int64
 		}
-		
+
+		// 判断是否是当前用户的评论
+		if currentUserID > 0 {
+			comment.IsMyComment = (comment.UserID == currentUserID)
+			
+			// 查询当前用户是否点赞了该评论
+			var likeCount int
+			database.DB.QueryRow(
+				"SELECT COUNT(*) FROM comment_likes WHERE user_id = ? AND comment_id = ?",
+				currentUserID, comment.ID,
+			).Scan(&likeCount)
+			comment.IsLiked = likeCount > 0
+		}
+
 		comments = append(comments, comment)
 	}
 
@@ -276,6 +295,12 @@ func GetCommentReplies(c *gin.Context) {
 		return
 	}
 
+	// 获取当前用户ID（如果已登录）
+	var currentUserID int64
+	if userID, exists := c.Get("user_id"); exists {
+		currentUserID = userID.(int64)
+	}
+
 	// 查询子回复列表
 	rows, err := database.DB.Query(`
 		SELECT c.id, c.post_id, c.user_id, c.parent_id, c.content, c.publisher, 
@@ -308,11 +333,24 @@ func GetCommentReplies(c *gin.Context) {
 		if err != nil {
 			continue
 		}
-		
+
 		if parentID.Valid {
 			reply.ParentID = &parentID.Int64
 		}
-		
+
+		// 判断是否是当前用户的评论
+		if currentUserID > 0 {
+			reply.IsMyComment = (reply.UserID == currentUserID)
+			
+			// 查询当前用户是否点赞了该评论
+			var likeCount int
+			database.DB.QueryRow(
+				"SELECT COUNT(*) FROM comment_likes WHERE user_id = ? AND comment_id = ?",
+				currentUserID, reply.ID,
+			).Scan(&likeCount)
+			reply.IsLiked = likeCount > 0
+		}
+
 		replies = append(replies, reply)
 	}
 
@@ -332,7 +370,7 @@ func GetCommentReplies(c *gin.Context) {
 func UpdateComment(c *gin.Context) {
 	id := c.Param("id")
 	userID, _ := c.Get("user_id")
-	
+
 	var req struct {
 		Content string `json:"content" binding:"required"`
 	}
@@ -398,7 +436,7 @@ func DeleteComment(c *gin.Context) {
 	var commentUserID, postID int64
 	var parentID sql.NullInt64
 	err := database.DB.QueryRow(
-		"SELECT user_id, post_id, parent_id FROM comments WHERE id = ?", 
+		"SELECT user_id, post_id, parent_id FROM comments WHERE id = ?",
 		id,
 	).Scan(&commentUserID, &postID, &parentID)
 	if err == sql.ErrNoRows {
@@ -492,7 +530,7 @@ func DeleteComment(c *gin.Context) {
 	// 6. 更新帖子的评论数（包括删除的子回复数量）
 	totalDeletedComments := 1 + subCommentsCount // 主评论 + 子回复数量
 	_, err = tx.Exec(
-		"UPDATE posts SET comment_count = comment_count - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND comment_count >= ?", 
+		"UPDATE posts SET comment_count = comment_count - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND comment_count >= ?",
 		totalDeletedComments, postID, totalDeletedComments,
 	)
 	if err != nil {

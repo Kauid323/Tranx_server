@@ -5,7 +5,9 @@ import (
 	"TaruApp/models"
 	"TaruApp/utils"
 	"database/sql"
+	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -845,5 +847,148 @@ func GetPostStats(c *gin.Context) {
 		Code:    200,
 		Message: "获取统计信息成功",
 		Data:    stats,
+	})
+}
+
+// GetMyPosts 获取我发布的帖子
+func GetMyPosts(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	
+	// 获取查询参数
+	page := 1
+	pageSize := 20
+	if p := c.Query("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+	if ps := c.Query("page_size"); ps != "" {
+		if parsed, err := strconv.Atoi(ps); err == nil && parsed > 0 && parsed <= 100 {
+			pageSize = parsed
+		}
+	}
+	
+	boardID := c.Query("board_id") // 可选的板块筛选
+	sort := c.DefaultQuery("sort", "time") // 排序方式：time(时间), likes(点赞), comments(评论)
+	
+	offset := (page - 1) * pageSize
+
+	// 构建查询条件
+	whereClause := "WHERE p.user_id = ?"
+	args := []interface{}{userID}
+	
+	if boardID != "" {
+		whereClause += " AND p.board_id = ?"
+		args = append(args, boardID)
+	}
+
+	// 排序条件
+	var orderClause string
+	switch sort {
+	case "likes":
+		orderClause = "ORDER BY p.likes DESC, p.publish_time DESC"
+	case "comments":
+		orderClause = "ORDER BY p.comment_count DESC, p.publish_time DESC"
+	case "time":
+		fallthrough
+	default:
+		orderClause = "ORDER BY p.publish_time DESC"
+	}
+
+	// 查询总数
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM posts p %s", whereClause)
+	var total int
+	err := database.DB.QueryRow(countQuery, args...).Scan(&total)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询帖子总数失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 查询帖子列表
+	query := fmt.Sprintf(`
+		SELECT p.id, p.board_id, p.title, p.content, p.type, p.publisher, p.publish_time, 
+			p.coins, p.favorites, p.likes, p.image_url, p.comment_count, p.view_count,
+			b.name as board_name
+		FROM posts p 
+		LEFT JOIN boards b ON p.board_id = b.id 
+		%s %s 
+		LIMIT ? OFFSET ?`, whereClause, orderClause)
+	
+	queryArgs := append(args, pageSize, offset)
+	rows, err := database.DB.Query(query, queryArgs...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Response{
+			Code:    500,
+			Message: "查询帖子列表失败: " + err.Error(),
+		})
+		return
+	}
+	defer rows.Close()
+
+	var posts []gin.H
+	for rows.Next() {
+		var post struct {
+			ID           int64
+			BoardID      int64
+			Title        string
+			Content      string
+			Type         string
+			Publisher    string
+			PublishTime  time.Time
+			Coins        int
+			Favorites    int
+			Likes        int
+			ImageURL     sql.NullString
+			CommentCount int
+			ViewCount    int
+			BoardName    sql.NullString
+		}
+
+		err := rows.Scan(
+			&post.ID, &post.BoardID, &post.Title, &post.Content, &post.Type,
+			&post.Publisher, &post.PublishTime, &post.Coins, &post.Favorites,
+			&post.Likes, &post.ImageURL, &post.CommentCount, &post.ViewCount,
+			&post.BoardName,
+		)
+		if err != nil {
+			continue
+		}
+
+		postData := gin.H{
+			"id":            post.ID,
+			"board_id":      post.BoardID,
+			"board_name":    post.BoardName.String,
+			"title":         post.Title,
+			"content":       post.Content,
+			"type":          post.Type,
+			"publisher":     post.Publisher,
+			"publish_time":  post.PublishTime.Format("2006-01-02 15:04:05"),
+			"publish_time_ts": post.PublishTime.Unix(),
+			"coins":         post.Coins,
+			"favorites":     post.Favorites,
+			"likes":         post.Likes,
+			"comment_count": post.CommentCount,
+			"view_count":    post.ViewCount,
+		}
+
+		if post.ImageURL.Valid {
+			postData["image_url"] = post.ImageURL.String
+		}
+
+		posts = append(posts, postData)
+	}
+
+	c.JSON(http.StatusOK, models.Response{
+		Code:    200,
+		Message: "获取我的帖子成功",
+		Data: models.PageData{
+			Total:    total,
+			Page:     page,
+			PageSize: pageSize,
+			List:     posts,
+		},
 	})
 }

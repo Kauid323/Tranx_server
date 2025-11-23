@@ -122,8 +122,13 @@ func createTables() error {
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				name TEXT NOT NULL UNIQUE,
 				description TEXT,
+				avatar_url TEXT,
+				creator_id INTEGER,
+				creator_name TEXT,
+				creator_avatar TEXT,
 				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (creator_id) REFERENCES users(id)
 			);`,
 			Repair: repairBoardsTable,
 		},
@@ -534,7 +539,29 @@ func repairCommentsTable() error {
 }
 
 func repairBoardsTable() error {
-	// boards表通常不需要修复，但可以在这里添加逻辑
+	// 检查并添加可能缺失的字段
+	columns := []struct {
+		name         string
+		definition   string
+		defaultValue string
+	}{
+		{"avatar_url", "TEXT", ""},
+		{"creator_id", "INTEGER", ""},
+		{"creator_name", "TEXT", ""},
+		{"creator_avatar", "TEXT", ""},
+	}
+
+	for _, col := range columns {
+		if !columnExists("boards", col.name) {
+			log.Printf("为boards表添加字段: %s", col.name)
+			_, err := DB.Exec(fmt.Sprintf("ALTER TABLE boards ADD COLUMN %s %s", col.name, col.definition))
+			if err != nil {
+				log.Printf("添加字段 %s 失败: %v", col.name, err)
+			} else {
+				log.Printf("✓ 字段 %s 添加成功", col.name)
+			}
+		}
+	}
 	return nil
 }
 

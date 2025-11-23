@@ -209,6 +209,14 @@ POST /api/logout
 Token: <your_token>
 ```
 
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "退出登录成功"
+}
+```
+
 ---
 
 ### 3. 关注系统（需要Token）
@@ -274,6 +282,27 @@ Token: <your_token>
 ```http
 GET /api/follow/:id/followers?page=1&page_size=20
 Token: <your_token>
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取粉丝列表成功",
+  "data": {
+    "total": 15,
+    "page": 1,
+    "page_size": 20,
+    "list": [
+      {
+        "id": 2,
+        "username": "follower1",
+        "avatar": "https://example.com/avatar2.png",
+        "follow_time": "2024-01-10 15:20:00"
+      }
+    ]
+  }
+}
 ```
 
 ---
@@ -416,7 +445,24 @@ Content-Type: application/json
 ```json
 {
   "name": "技术讨论",
-  "description": "讨论各种技术问题"
+  "description": "讨论各种技术问题",
+  "avatar_url": "https://example.com/board-avatar.png"  // 可选，板块头像URL
+}
+```
+
+**字段说明：**
+- `name`: 板块名称（必填）
+- `description`: 板块描述（可选）
+- `avatar_url`: 板块头像图片URL（可选）
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "创建板块成功",
+  "data": {
+    "id": 3
+  }
 }
 ```
 
@@ -425,6 +471,13 @@ Content-Type: application/json
 GET /api/boards/list
 Token: <your_token>
 ```
+
+**返回字段说明：**
+- `creator_id`: 板块创建者用户ID
+- `creator_name`: 板块创建者用户名
+- `creator_avatar`: 板块创建者头像URL
+- `created_at_ts`: 创建时间戳（秒）
+- `updated_at_ts`: 更新时间戳（秒）
 
 **响应：**
 ```json
@@ -436,15 +489,27 @@ Token: <your_token>
       "id": 1,
       "name": "综合讨论",
       "description": "默认主板块，所有话题都可以在这里讨论",
+      "avatar_url": "",
+      "creator_id": 0,
+      "creator_name": "",
+      "creator_avatar": "",
       "created_at": "2024-01-01T00:00:00Z",
-      "updated_at": "2024-01-01T00:00:00Z"
+      "updated_at": "2024-01-01T00:00:00Z",
+      "created_at_ts": 1704067200,
+      "updated_at_ts": 1704067200
     },
     {
       "id": 2,
       "name": "技术讨论",
       "description": "讨论各种技术问题",
+      "avatar_url": "https://example.com/tech-board-avatar.png",
+      "creator_id": 123,
+      "creator_name": "admin",
+      "creator_avatar": "https://example.com/admin-avatar.png",
       "created_at": "2024-01-01T00:00:00Z",
-      "updated_at": "2024-01-01T00:00:00Z"
+      "updated_at": "2024-01-01T00:00:00Z",
+      "created_at_ts": 1704067200,
+      "updated_at_ts": 1704067200
     }
   ]
 }
@@ -456,11 +521,49 @@ GET /api/boards/:id
 Token: <your_token>
 ```
 
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取板块详情成功",
+  "data": {
+    "id": 1,
+    "name": "综合讨论",
+    "description": "默认主板块，所有话题都可以在这里讨论",
+    "avatar_url": "",
+    "creator_id": 1,
+    "creator_name": "admin",
+    "creator_avatar": "https://example.com/admin-avatar.png",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z",
+    "created_at_ts": 1704067200,
+    "updated_at_ts": 1704067200
+  }
+}
+```
+
 #### 5.4 更新板块
 ```http
 PUT /api/boards/:id
 Token: <your_token>
 Content-Type: application/json
+```
+
+**请求体：**
+```json
+{
+  "name": "技术讨论",
+  "description": "讨论各种技术问题",
+  "avatar_url": "https://example.com/new-board-avatar.png"  // 可选，更新板块头像URL
+}
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "更新板块成功"
+}
 ```
 
 #### 5.5 删除板块
@@ -469,11 +572,66 @@ DELETE /api/boards/:id
 Token: <your_token>
 ```
 
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "删除板块成功"
+}
+```
+
 ---
 
 ### 6. 帖子管理（需要Token）
 
-#### 6.1 创建帖子
+#### 6.1 获取我的帖子
+```http
+GET /api/posts/my
+Token: <your_token>
+```
+
+**查询参数：**
+- `page` (可选): 页码，默认1
+- `page_size` (可选): 每页数量，默认20，最大100
+- `board_id` (可选): 板块ID筛选
+- `sort` (可选): 排序方式
+  - `time`: 按发布时间排序（默认）
+  - `likes`: 按点赞数排序
+  - `comments`: 按评论数排序
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取我的帖子成功",
+  "data": {
+    "total": 25,
+    "page": 1,
+    "page_size": 20,
+    "list": [
+      {
+        "id": 123,
+        "board_id": 1,
+        "board_name": "综合讨论",
+        "title": "我的帖子标题",
+        "content": "帖子内容...",
+        "type": "text",
+        "publisher": "myusername",
+        "publish_time": "2024-01-15 10:30:00",
+        "publish_time_ts": 1705294200,
+        "coins": 5,
+        "favorites": 10,
+        "likes": 15,
+        "comment_count": 8,
+        "view_count": 120,
+        "image_url": "https://example.com/image.jpg"
+      }
+    ]
+  }
+}
+```
+
+#### 6.2 创建帖子
 ```http
 POST /api/posts/create
 Token: <your_token>
@@ -491,9 +649,24 @@ Content-Type: application/json
 }
 ```
 
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "创建帖子成功",
+  "data": {
+    "post_id": 123,
+    "board_id": 1,
+    "title": "帖子标题",
+    "publisher": "username",
+    "publish_time": "2024-01-15 10:30:00"
+  }
+}
+```
+
 **注意：** 发布者信息从Token中自动获取
 
-#### 6.2 获取帖子列表
+#### 6.3 获取帖子列表
 ```http
 GET /api/posts/list?board_id=1&sort=latest&page=1&page_size=20
 Token: <your_token>
@@ -542,13 +715,13 @@ Token: <your_token>
 }
 ```
 
-#### 6.3 获取帖子详情
+#### 6.4 获取帖子详情
 ```http
 GET /api/posts/:id
 Token: <your_token>
 ```
 
-#### 6.4 更新帖子
+#### 6.5 更新帖子
 ```http
 PUT /api/posts/:id
 Token: <your_token>
@@ -567,7 +740,7 @@ Content-Type: application/json
 
 **权限说明：** 只有帖子作者本人才能编辑自己的帖子
 
-#### 6.5 删除帖子
+#### 6.6 删除帖子
 ```http
 DELETE /api/posts/:id
 Token: <your_token>
@@ -597,7 +770,7 @@ Token: <your_token>
 }
 ```
 
-#### 6.6 点赞/取消点赞帖子（切换功能）
+#### 6.7 点赞/取消点赞帖子（切换功能）
 ```http
 POST /api/posts/:id/like
 Token: <your_token>
@@ -620,13 +793,13 @@ Token: <your_token>
 }
 ```
 
-#### 6.7 收藏帖子
+#### 6.8 收藏帖子
 ```http
 POST /api/posts/:id/favorite
 Token: <your_token>
 ```
 
-#### 6.8 投币帖子
+#### 6.9 投币帖子
 ```http
 POST /api/posts/:id/coin
 Token: <your_token>
@@ -669,6 +842,10 @@ POST /api/comments/create
 Token: <your_token>
 Content-Type: application/json
 ```
+
+**说明：**
+- 评论发送者的身份通过 Token 自动识别，无需在请求中提供用户信息
+- 系统会自动记录评论者的用户名、头像等信息
 
 **请求体：**
 ```json
@@ -725,7 +902,9 @@ Token: <your_token>
         "coins": 2,
         "is_author": false,
         "floor": 1,
-        "reply_count": 3
+        "reply_count": 3,
+        "is_liked": false,     // 当前用户是否点赞了该评论
+        "is_my_comment": false // 是否是当前用户的评论
       }
     ]
   }
@@ -2002,4 +2181,12 @@ Content-Type: application/json
 4. **下载统计**
    - 自动记录应用下载次数
    - 不需要登录即可统计
+
+---
+
+## 📝 文档更新说明
+
+**新增API规则：** 以后所有新增的API文档内容都会添加到本文档的最后面，保持文档的连续性和版本管理的清晰性。
+
+**最后更新时间：** 2024-11-23
 

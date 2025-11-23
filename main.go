@@ -141,6 +141,7 @@ func main() {
 			{
 				posts.POST("/create", handlers.CreatePost)     // 创建帖子
 				posts.GET("/list", handlers.GetPosts)          // 获取帖子列表（支持板块筛选和排序）
+				posts.GET("/my", handlers.GetMyPosts)          // 获取我的帖子列表
 				posts.GET("/:id", handlers.GetPostDetail)      // 获取帖子详情
 				posts.PUT("/:id", handlers.UpdatePost)         // 更新帖子
 				posts.DELETE("/:id", handlers.DeletePost)      // 删除帖子

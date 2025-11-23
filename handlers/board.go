@@ -20,9 +20,17 @@ func CreateBoard(c *gin.Context) {
 		return
 	}
 
+	// 获取创建者信息
+	creatorID, _ := c.Get("user_id")
+	creatorName, _ := c.Get("username")
+
+	// 获取创建者头像
+	var creatorAvatar string
+	database.DB.QueryRow("SELECT COALESCE(avatar, '') FROM users WHERE id = ?", creatorID).Scan(&creatorAvatar)
+
 	result, err := database.DB.Exec(
-		"INSERT INTO boards (name, description) VALUES (?, ?)",
-		req.Name, req.Description,
+		"INSERT INTO boards (name, description, avatar_url, creator_id, creator_name, creator_avatar) VALUES (?, ?, ?, ?, ?, ?)",
+		req.Name, req.Description, req.AvatarURL, creatorID, creatorName, creatorAvatar,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -45,7 +53,8 @@ func CreateBoard(c *gin.Context) {
 // GetAllBoards 获取所有板块
 func GetAllBoards(c *gin.Context) {
 	rows, err := database.DB.Query(
-		"SELECT id, name, description, created_at, updated_at FROM boards ORDER BY created_at DESC",
+		`SELECT id, name, description, avatar_url, creator_id, creator_name, creator_avatar, 
+		created_at, updated_at FROM boards ORDER BY created_at DESC`,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -59,9 +68,29 @@ func GetAllBoards(c *gin.Context) {
 	var boards []models.Board
 	for rows.Next() {
 		var board models.Board
-		if err := rows.Scan(&board.ID, &board.Name, &board.Description, &board.CreatedAt, &board.UpdatedAt); err != nil {
+		var creatorID sql.NullInt64
+		var creatorName, creatorAvatar sql.NullString
+
+		if err := rows.Scan(&board.ID, &board.Name, &board.Description, &board.AvatarURL,
+			&creatorID, &creatorName, &creatorAvatar, &board.CreatedAt, &board.UpdatedAt); err != nil {
 			continue
 		}
+
+		// 处理可能为空的创建者信息
+		if creatorID.Valid {
+			board.CreatorID = creatorID.Int64
+		}
+		if creatorName.Valid {
+			board.CreatorName = creatorName.String
+		}
+		if creatorAvatar.Valid {
+			board.CreatorAvatar = creatorAvatar.String
+		}
+
+		// 设置时间戳
+		board.CreatedAtTs = board.CreatedAt.Unix()
+		board.UpdatedAtTs = board.UpdatedAt.Unix()
+
 		boards = append(boards, board)
 	}
 
@@ -77,10 +106,15 @@ func GetBoardDetail(c *gin.Context) {
 	id := c.Param("id")
 
 	var board models.Board
+	var creatorID sql.NullInt64
+	var creatorName, creatorAvatar sql.NullString
+
 	err := database.DB.QueryRow(
-		"SELECT id, name, description, created_at, updated_at FROM boards WHERE id = ?",
+		`SELECT id, name, description, avatar_url, creator_id, creator_name, creator_avatar, 
+		created_at, updated_at FROM boards WHERE id = ?`,
 		id,
-	).Scan(&board.ID, &board.Name, &board.Description, &board.CreatedAt, &board.UpdatedAt)
+	).Scan(&board.ID, &board.Name, &board.Description, &board.AvatarURL,
+		&creatorID, &creatorName, &creatorAvatar, &board.CreatedAt, &board.UpdatedAt)
 
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, models.Response{
@@ -96,6 +130,21 @@ func GetBoardDetail(c *gin.Context) {
 		})
 		return
 	}
+
+	// 处理可能为空的创建者信息
+	if creatorID.Valid {
+		board.CreatorID = creatorID.Int64
+	}
+	if creatorName.Valid {
+		board.CreatorName = creatorName.String
+	}
+	if creatorAvatar.Valid {
+		board.CreatorAvatar = creatorAvatar.String
+	}
+
+	// 设置时间戳
+	board.CreatedAtTs = board.CreatedAt.Unix()
+	board.UpdatedAtTs = board.UpdatedAt.Unix()
 
 	c.JSON(http.StatusOK, models.Response{
 		Code:    200,
@@ -117,8 +166,8 @@ func UpdateBoard(c *gin.Context) {
 	}
 
 	_, err := database.DB.Exec(
-		"UPDATE boards SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-		req.Name, req.Description, id,
+		"UPDATE boards SET name = ?, description = ?, avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		req.Name, req.Description, req.AvatarURL, id,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Response{
@@ -185,4 +234,3 @@ func GetBoardStats(c *gin.Context) {
 		},
 	})
 }
-

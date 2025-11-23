@@ -55,11 +55,17 @@ type Token struct {
 
 // Board 板块模型
 type Board struct {
-	ID          int64     `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID             int64     `json:"id"`
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
+	AvatarURL      string    `json:"avatar_url"`      // 板块头像URL
+	CreatorID      int64     `json:"creator_id"`      // 创建者用户ID
+	CreatorName    string    `json:"creator_name"`    // 创建者用户名
+	CreatorAvatar  string    `json:"creator_avatar"`  // 创建者头像URL
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	CreatedAtTs    int64     `json:"created_at_ts"`   // 创建时间戳（秒）
+	UpdatedAtTs    int64     `json:"updated_at_ts"`   // 更新时间戳（秒）
 }
 
 // Post 帖子模型
@@ -92,14 +98,16 @@ type Comment struct {
 	UserID      int64     `json:"user_id"`   // 评论者用户ID
 	ParentID    *int64    `json:"parent_id"` // 父评论ID，用于楼中楼回复
 	Content     string    `json:"content"`
-	Publisher   string    `json:"publisher"`    // 评论者用户名
-	Avatar      string    `json:"avatar"`       // 评论者头像URL
-	PublishTime time.Time `json:"publish_time"` // 评论时间
-	Likes       int       `json:"likes"`        // 点赞数
-	Coins       int       `json:"coins"`        // 投币数
-	IsAuthor    bool      `json:"is_author"`    // 是否为楼主
-	Floor       int       `json:"floor"`        // 楼层号
-	ReplyCount  int       `json:"reply_count"`  // 子回复数量
+	Publisher   string    `json:"publisher"`     // 评论者用户名
+	Avatar      string    `json:"avatar"`        // 评论者头像URL
+	PublishTime time.Time `json:"publish_time"`  // 评论时间
+	Likes       int       `json:"likes"`         // 点赞数
+	Coins       int       `json:"coins"`         // 投币数
+	IsAuthor    bool      `json:"is_author"`     // 是否为楼主
+	Floor       int       `json:"floor"`         // 楼层号
+	ReplyCount  int       `json:"reply_count"`   // 子回复数量
+	IsLiked     bool      `json:"is_liked"`      // 当前用户是否点赞
+	IsMyComment bool      `json:"is_my_comment"` // 是否是当前用户的评论
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -225,6 +233,7 @@ type UserDetail struct {
 type CreateBoardRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
+	AvatarURL   string `json:"avatar_url"`   // 板块头像URL（可选）
 }
 
 // CreatePostRequest 创建帖子请求
