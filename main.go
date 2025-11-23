@@ -46,6 +46,17 @@ func main() {
 			auth.POST("/login", handlers.Login)       // 用户登录
 		}
 
+		// 应用市场路由（不需要认证）
+		apps := api.Group("/apps")
+		{
+			apps.GET("", handlers.GetApps)                             // 获取应用列表
+			apps.GET("/categories", handlers.GetMainCategories)        // 获取所有大分类
+			apps.GET("/subcategories", handlers.GetSubCategories)      // 获取指定大分类下的小分类
+			apps.GET("/category", handlers.GetAppsByCategory)          // 根据分类获取应用列表
+			apps.GET("/:package_name", handlers.GetAppDetail)          // 获取应用详情
+			apps.POST("/:package_name/download", handlers.DownloadApp) // 记录下载
+		}
+
 		// 需要认证的路由
 		authorized := api.Group("")
 		authorized.Use(middleware.AuthRequired())
@@ -64,18 +75,21 @@ func main() {
 			// 收藏夹功能
 			folders := authorized.Group("/folders")
 			{
-				folders.POST("/create", handlers.CreateFavoriteFolder)                      // 创建收藏夹
-				folders.GET("/my", handlers.GetMyFavoriteFolders)                           // 获取我的收藏夹列表
-				folders.GET("/user/:id", handlers.GetUserFavoriteFolders)                   // 获取用户的收藏夹列表
-				folders.PUT("/:id", handlers.UpdateFavoriteFolder)                          // 更新收藏夹
-				folders.DELETE("/:id", handlers.DeleteFavoriteFolder)                       // 删除收藏夹
-				folders.GET("/:id/posts", handlers.GetFolderPosts)             // 获取收藏夹中的帖子
-				folders.POST("/:id/posts", handlers.AddPostToFolder)           // 添加帖子到收藏夹
+				folders.POST("/create", handlers.CreateFavoriteFolder)               // 创建收藏夹
+				folders.GET("/my", handlers.GetMyFavoriteFolders)                    // 获取我的收藏夹列表
+				folders.GET("/user/:id", handlers.GetUserFavoriteFolders)            // 获取用户的收藏夹列表
+				folders.PUT("/:id", handlers.UpdateFavoriteFolder)                   // 更新收藏夹
+				folders.DELETE("/:id", handlers.DeleteFavoriteFolder)                // 删除收藏夹
+				folders.GET("/:id/posts", handlers.GetFolderPosts)                   // 获取收藏夹中的帖子
+				folders.POST("/:id/posts", handlers.AddPostToFolder)                 // 添加帖子到收藏夹
 				folders.DELETE("/:id/posts/:post_id", handlers.RemovePostFromFolder) // 从收藏夹移除帖子
 			}
 
 			// 浏览历史
 			authorized.GET("/history", handlers.GetViewHistory) // 获取浏览历史
+
+			// 应用市场（需要登录的部分）
+			authorized.POST("/apps/:package_name/coin", handlers.CoinApp) // 给应用投币
 
 			// 关注系统
 			follow := authorized.Group("/follow")
@@ -121,13 +135,13 @@ func main() {
 			// 评论相关
 			comments := authorized.Group("/comments")
 			{
-				comments.POST("/create", handlers.CreateComment)       // 创建评论（支持楼中楼回复）
-				comments.GET("/list", handlers.GetComments)            // 获取评论列表（只显示顶级评论）
+				comments.POST("/create", handlers.CreateComment)         // 创建评论（支持楼中楼回复）
+				comments.GET("/list", handlers.GetComments)              // 获取评论列表（只显示顶级评论）
 				comments.GET("/:id/replies", handlers.GetCommentReplies) // 获取评论的子回复列表
-				comments.PUT("/:id", handlers.UpdateComment)           // 更新评论
-				comments.DELETE("/:id", handlers.DeleteComment)        // 删除评论
-				comments.POST("/:id/like", handlers.LikeComment)       // 点赞评论
-				comments.POST("/:id/coin", handlers.CoinComment)       // 投币评论
+				comments.PUT("/:id", handlers.UpdateComment)             // 更新评论
+				comments.DELETE("/:id", handlers.DeleteComment)          // 删除评论
+				comments.POST("/:id/like", handlers.LikeComment)         // 点赞评论
+				comments.POST("/:id/coin", handlers.CoinComment)         // 投币评论
 			}
 
 			// 统计相关

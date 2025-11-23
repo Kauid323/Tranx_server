@@ -1403,3 +1403,277 @@ Token: <your_token>
 }
 ```
 
+---
+
+## 15. 应用市场 API
+
+### 15.1 获取所有大分类
+```http
+GET /api/apps/categories
+```
+
+**说明：**
+- 获取应用市场所有的大分类列表
+- 不需要登录
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取大分类成功",
+  "data": [
+    "动作冒险",
+    "休闲益智",
+    "影音视听",
+    "实用工具",
+    "聊天社交",
+    "图书阅读",
+    "时尚购物",
+    "摄影摄像",
+    "学习教育",
+    "旅行交通",
+    "金融理财",
+    "娱乐消遣",
+    "新闻资讯",
+    "居家生活",
+    "体育运动",
+    "医疗健康",
+    "效率办公",
+    "玩机",
+    "定制系统应用"
+  ]
+}
+```
+
+### 15.2 获取指定大分类下的小分类
+```http
+GET /api/apps/subcategories?main_category=动作冒险
+```
+
+**查询参数：**
+- `main_category` (必填): 大分类名称
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取小分类成功",
+  "data": {
+    "main_category": "动作冒险",
+    "sub_categories": [
+      "跑酷闯关",
+      "网游RPG",
+      "赛车体育",
+      "飞行空战",
+      "动作枪战",
+      "格斗快打"
+    ]
+  }
+}
+```
+
+### 15.3 根据分类获取应用列表
+```http
+GET /api/apps/category?main_category=动作冒险&sub_category=网游RPG
+```
+
+**查询参数：**
+- `main_category` (必填): 大分类名称
+- `sub_category` (必填): 小分类名称
+- `sort` (可选): 排序方式
+  - `rating`: 按评分排序
+  - `download`: 按下载量排序（默认）
+  - `update`: 按更新时间排序
+- `page` (可选): 页码，默认1
+- `page_size` (可选): 每页数量，默认20，最大100
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取分类应用列表成功",
+  "data": {
+    "total": 50,
+    "page": 1,
+    "page_size": 20,
+    "list": [
+      {
+        "package_name": "com.example.rpg",
+        "name": "示例RPG游戏",
+        "icon_url": "https://example.com/icon.png",
+        "version": "2.1.0",
+        "size": 52428800,
+        "rating": 4.8
+      }
+    ]
+  }
+}
+```
+
+### 15.4 获取应用列表
+```http
+GET /api/apps
+```
+
+**查询参数：**
+- `category` (可选): 分类筛选（如：游戏、工具、社交等）
+- `sort` (可选): 排序方式
+  - `rating`: 按评分排序
+  - `download`: 按下载量排序（默认）
+  - `update`: 按更新时间排序
+- `page` (可选): 页码，默认1
+- `page_size` (可选): 每页数量，默认20，最大100
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取应用列表成功",
+  "data": {
+    "total": 150,
+    "page": 1,
+    "page_size": 20,
+    "list": [
+      {
+        "package_name": "com.example.app",
+        "name": "示例应用",
+        "icon_url": "https://example.com/icon.png",
+        "version": "1.2.3",
+        "size": 10485760,  // 字节
+        "rating": 4.5
+      }
+    ]
+  }
+}
+```
+
+### 15.5 获取应用详情
+```http
+GET /api/apps/:package_name
+```
+
+**路径参数：**
+- `package_name`: 应用包名
+
+**查询参数：**
+- `version` (可选): 指定版本号，不传则返回最新版本
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "获取应用详情成功",
+  "data": {
+    "package_name": "com.example.app",
+    "name": "示例应用",
+    "icon_url": "https://example.com/icon.png",
+    "version": "1.2.3",
+    "version_code": 10203,
+    "size": 10485760,
+    "rating": 4.5,
+    "rating_count": 1234,
+    "description": "这是一个示例应用的详细介绍...",
+    "screenshots": [
+      "https://example.com/screenshot1.png",
+      "https://example.com/screenshot2.png"
+    ],
+    "tags": ["工具", "效率", "免费"],
+    "download_url": "https://example.com/app-v1.2.3.apk",
+    "total_coins": 5678,
+    "download_count": 12345,
+    "uploader_name": "developer123",
+    "update_content": "1. 修复了一些bug\n2. 优化了性能\n3. 新增了XX功能",
+    "update_time": "2024-01-15 10:30:00",
+    "main_category": "动作冒险",
+    "sub_category": "网游RPG"
+  }
+}
+```
+
+### 15.6 给应用投币
+```http
+POST /api/apps/:package_name/coin
+Token: <your_token>
+Content-Type: application/json
+```
+
+**路径参数：**
+- `package_name`: 应用包名
+
+**请求体：**
+```json
+{
+  "coins": 5  // 投币数量，1-10
+}
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "投币成功，投了5个硬币",
+  "data": {
+    "total_coins": 5683  // 应用当前总投币数
+  }
+}
+```
+
+### 15.7 记录应用下载
+```http
+POST /api/apps/:package_name/download
+```
+
+**路径参数：**
+- `package_name`: 应用包名
+
+**说明：**
+- 此API用于记录应用下载次数
+- 不需要登录即可调用
+- 每次调用会将应用的下载计数+1
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "下载记录成功"
+}
+```
+
+---
+
+## 应用市场功能说明
+
+### 数据结构
+
+1. **应用表 (apps)**
+   - 存储应用的基本信息
+   - 包含包名、名称、图标、描述、标签、评分、投币数、下载量等
+
+2. **应用版本表 (app_versions)**
+   - 存储应用的各个版本信息
+   - 包含版本号、版本代码、大小、下载链接、更新内容、截图、上传者等
+   - 支持多版本管理，标记最新版本
+
+### 功能特点
+
+1. **应用列表**
+   - 支持分类筛选
+   - 多种排序方式（评分、下载量、更新时间）
+   - 分页展示
+   - 显示最新版本信息
+
+2. **应用详情**
+   - 完整的应用信息展示
+   - 支持查看指定版本或最新版本
+   - 包含应用截图、标签、更新内容等
+   - 显示投币数和下载量
+
+3. **投币功能**
+   - 用户可以给喜欢的应用投币支持
+   - 投币数量限制1-10个
+   - 需要登录且硬币充足
+
+4. **下载统计**
+   - 自动记录应用下载次数
+   - 不需要登录即可统计
+

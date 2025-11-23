@@ -1,4 +1,4 @@
-# TaruApp - 社区服务器后台
+# Tranx - 社区服务器后台
 
 基于 Golang 的社区论坛后台系统，提供板块管理、帖子发布、评论互动等完整功能。
 
@@ -47,6 +47,8 @@ go run main.go
 ```bash
 curl http://localhost:4999/health
 ```
+# Tranx客户端：
+安卓：[Tranx Client（构建请看Github Actions）](https://github.com/Kauid323/Tranx_client)
 
 ## API 文档
 
@@ -362,5 +364,5 @@ MIT License
 
 ## 作者
 
-TaruApp Team
+Kauid323
 

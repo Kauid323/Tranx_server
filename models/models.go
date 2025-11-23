@@ -87,21 +87,21 @@ type Post struct {
 
 // Comment 评论模型
 type Comment struct {
-	ID           int64     `json:"id"`
-	PostID       int64     `json:"post_id"`
-	UserID       int64     `json:"user_id"`       // 评论者用户ID
-	ParentID     *int64    `json:"parent_id"`     // 父评论ID，用于楼中楼回复
-	Content      string    `json:"content"`
-	Publisher    string    `json:"publisher"`     // 评论者用户名
-	Avatar       string    `json:"avatar"`        // 评论者头像URL
-	PublishTime  time.Time `json:"publish_time"`  // 评论时间
-	Likes        int       `json:"likes"`         // 点赞数
-	Coins        int       `json:"coins"`         // 投币数
-	IsAuthor     bool      `json:"is_author"`     // 是否为楼主
-	Floor        int       `json:"floor"`         // 楼层号
-	ReplyCount   int       `json:"reply_count"`   // 子回复数量
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID          int64     `json:"id"`
+	PostID      int64     `json:"post_id"`
+	UserID      int64     `json:"user_id"`   // 评论者用户ID
+	ParentID    *int64    `json:"parent_id"` // 父评论ID，用于楼中楼回复
+	Content     string    `json:"content"`
+	Publisher   string    `json:"publisher"`    // 评论者用户名
+	Avatar      string    `json:"avatar"`       // 评论者头像URL
+	PublishTime time.Time `json:"publish_time"` // 评论时间
+	Likes       int       `json:"likes"`        // 点赞数
+	Coins       int       `json:"coins"`        // 投币数
+	IsAuthor    bool      `json:"is_author"`    // 是否为楼主
+	Floor       int       `json:"floor"`        // 楼层号
+	ReplyCount  int       `json:"reply_count"`  // 子回复数量
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // CreateUserRequest 创建用户请求
@@ -229,10 +229,10 @@ type CreateBoardRequest struct {
 
 // CreatePostRequest 创建帖子请求
 type CreatePostRequest struct {
-	BoardID  int64  `json:"board_id"`                   // 板块ID，不传或传0则默认发到主板块(ID=1)
+	BoardID  int64  `json:"board_id"` // 板块ID，不传或传0则默认发到主板块(ID=1)
 	Title    string `json:"title" binding:"required"`
 	Content  string `json:"content" binding:"required"`
-	Type     string `json:"type"`                       // 帖子类型: "text"(默认) 或 "markdown"
+	Type     string `json:"type"` // 帖子类型: "text"(默认) 或 "markdown"
 	ImageURL string `json:"image_url"`
 }
 
@@ -272,4 +272,99 @@ type PageData struct {
 	Page     int         `json:"page"`
 	PageSize int         `json:"page_size"`
 	List     interface{} `json:"list"`
+}
+
+// App 应用信息
+type App struct {
+	ID            int64     `json:"id"`
+	PackageName   string    `json:"package_name"`   // 应用包名（唯一标识）
+	Name          string    `json:"name"`           // 应用名称
+	IconURL       string    `json:"icon_url"`       // 应用图标URL
+	Description   string    `json:"description"`    // 应用介绍
+	Tags          string    `json:"tags"`           // 应用标签（逗号分隔）
+	Rating        float64   `json:"rating"`         // 应用评分（0-5）
+	RatingCount   int       `json:"rating_count"`   // 评分人数
+	TotalCoins    int       `json:"total_coins"`    // 总投币数
+	DownloadCount int       `json:"download_count"` // 总下载量
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// AppVersion 应用版本
+type AppVersion struct {
+	ID            int64     `json:"id"`
+	AppID         int64     `json:"app_id"`
+	PackageName   string    `json:"package_name"`   // 冗余字段，方便查询
+	Version       string    `json:"version"`        // 版本号
+	VersionCode   int       `json:"version_code"`   // 版本代码（用于排序）
+	Size          int64     `json:"size"`           // 应用大小（字节）
+	DownloadURL   string    `json:"download_url"`   // 下载链接
+	UpdateContent string    `json:"update_content"` // 更新内容
+	Screenshots   string    `json:"screenshots"`    // 预览图URLs（JSON数组）
+	UploaderID    int64     `json:"uploader_id"`    // 上传者ID
+	UploaderName  string    `json:"uploader_name"`  // 上传者用户名
+	IsLatest      bool      `json:"is_latest"`      // 是否最新版本
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// AppListItem 应用列表项
+type AppListItem struct {
+	PackageName string  `json:"package_name"`
+	Name        string  `json:"name"`
+	IconURL     string  `json:"icon_url"`
+	Version     string  `json:"version"` // 最新版本号
+	Size        int64   `json:"size"`    // 最新版本大小
+	Rating      float64 `json:"rating"`
+}
+
+// AppDetail 应用详情
+type AppDetail struct {
+	PackageName   string   `json:"package_name"`
+	Name          string   `json:"name"`
+	IconURL       string   `json:"icon_url"`
+	Version       string   `json:"version"`
+	VersionCode   int      `json:"version_code"`
+	Size          int64    `json:"size"`
+	Rating        float64  `json:"rating"`
+	RatingCount   int      `json:"rating_count"`
+	Description   string   `json:"description"`
+	Screenshots   []string `json:"screenshots"`
+	Tags          []string `json:"tags"`
+	DownloadURL   string   `json:"download_url"`
+	TotalCoins    int      `json:"total_coins"`
+	DownloadCount int      `json:"download_count"`
+	UploaderName  string   `json:"uploader_name"`
+	UpdateContent string   `json:"update_content"`
+	UpdateTime    string   `json:"update_time"`
+	MainCategory  string   `json:"main_category"` // 大分类
+	SubCategory   string   `json:"sub_category"`  // 小分类
+}
+
+// GetAppsQuery 获取应用列表查询参数
+type GetAppsQuery struct {
+	Category string `form:"category"`  // 分类筛选
+	Sort     string `form:"sort"`      // 排序: rating, download, update
+	Page     int    `form:"page"`      // 页码
+	PageSize int    `form:"page_size"` // 每页数量
+}
+
+// GetAppDetailQuery 获取应用详情查询参数
+type GetAppDetailQuery struct {
+	Version string `form:"version"` // 版本号（可选，不传则返回最新版本）
+}
+
+// AppCategory 应用分类
+type AppCategory struct {
+	MainCategory  string   `json:"main_category"`  // 大分类
+	SubCategories []string `json:"sub_categories"` // 小分类列表
+}
+
+// GetAppsByCategoryQuery 根据分类获取应用列表查询参数
+type GetAppsByCategoryQuery struct {
+	MainCategory string `form:"main_category" binding:"required"` // 大分类
+	SubCategory  string `form:"sub_category" binding:"required"`  // 小分类
+	Sort         string `form:"sort"`                             // 排序方式
+	Page         int    `form:"page"`                             // 页码
+	PageSize     int    `form:"page_size"`                        // 每页数量
 }

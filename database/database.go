@@ -49,7 +49,7 @@ type TableDefinition struct {
 // createTables 创建数据表
 func createTables() error {
 	log.Println("开始检查和创建数据表...")
-	
+
 	// 定义所有表的结构
 	tables := []TableDefinition{
 		{
@@ -238,6 +238,48 @@ func createTables() error {
 				FOREIGN KEY (post_id) REFERENCES posts(id)
 			);`,
 		},
+		{
+			Name: "apps",
+			SQL: `CREATE TABLE IF NOT EXISTS apps (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				package_name TEXT UNIQUE NOT NULL,
+				name TEXT NOT NULL,
+				icon_url TEXT,
+				description TEXT,
+				tags TEXT,
+				main_category TEXT,
+				sub_category TEXT,
+				rating REAL DEFAULT 0,
+				rating_count INTEGER DEFAULT 0,
+				total_coins INTEGER DEFAULT 0,
+				download_count INTEGER DEFAULT 0,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			);`,
+			Repair: repairAppsTable,
+		},
+		{
+			Name: "app_versions",
+			SQL: `CREATE TABLE IF NOT EXISTS app_versions (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				app_id INTEGER NOT NULL,
+				package_name TEXT NOT NULL,
+				version TEXT NOT NULL,
+				version_code INTEGER NOT NULL,
+				size INTEGER NOT NULL,
+				download_url TEXT NOT NULL,
+				update_content TEXT,
+				screenshots TEXT,
+				uploader_id INTEGER NOT NULL,
+				uploader_name TEXT NOT NULL,
+				is_latest BOOLEAN DEFAULT 0,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				UNIQUE(package_name, version),
+				FOREIGN KEY (app_id) REFERENCES apps(id),
+				FOREIGN KEY (uploader_id) REFERENCES users(id)
+			);`,
+		},
 	}
 
 	// 检查并创建每个表
@@ -328,6 +370,13 @@ func createIndexes() error {
 		`CREATE INDEX IF NOT EXISTS idx_view_histories_user_id ON view_histories(user_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_view_histories_post_id ON view_histories(post_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_view_histories_viewed_at ON view_histories(viewed_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_apps_package_name ON apps(package_name);`,
+		`CREATE INDEX IF NOT EXISTS idx_apps_rating ON apps(rating DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_apps_download_count ON apps(download_count DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_versions_app_id ON app_versions(app_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_versions_package_name ON app_versions(package_name);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_versions_version_code ON app_versions(version_code DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_versions_is_latest ON app_versions(is_latest);`,
 	}
 
 	for _, index := range indexes {
@@ -342,7 +391,7 @@ func createIndexes() error {
 // ensureDefaultData 确保默认数据存在
 func ensureDefaultData() error {
 	log.Println("检查默认数据...")
-	
+
 	// 创建默认主板块（如果不存在）
 	var count int
 	err := DB.QueryRow("SELECT COUNT(*) FROM boards WHERE id = 1").Scan(&count)
@@ -356,7 +405,7 @@ func ensureDefaultData() error {
 			log.Println("✓ 创建默认主板块成功")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -459,15 +508,41 @@ func columnExists(tableName, columnName string) bool {
 		var name, dataType string
 		var notNull, pk int
 		var defaultValue sql.NullString
-		
+
 		err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk)
 		if err != nil {
 			continue
 		}
-		
+
 		if name == columnName {
 			return true
 		}
 	}
 	return false
+}
+
+// repairAppsTable 修复apps表
+func repairAppsTable() error {
+	// 检查并添加可能缺失的字段
+	columns := []struct {
+		name         string
+		definition   string
+		defaultValue string
+	}{
+		{"main_category", "TEXT", ""},
+		{"sub_category", "TEXT", ""},
+	}
+
+	for _, col := range columns {
+		if !columnExists("apps", col.name) {
+			log.Printf("为apps表添加字段: %s", col.name)
+			_, err := DB.Exec(fmt.Sprintf("ALTER TABLE apps ADD COLUMN %s %s", col.name, col.definition))
+			if err != nil {
+				log.Printf("添加字段 %s 失败: %v", col.name, err)
+			} else {
+				log.Printf("✓ 字段 %s 添加成功", col.name)
+			}
+		}
+	}
+	return nil
 }
